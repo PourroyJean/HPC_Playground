@@ -1,9 +1,9 @@
 #!/bin/bash
 #
 # GENERAL OPTIONS
-#SBATCH --account project_465001098
+#SBATCH --account project_462000031
 #SBATCH --partition standard
-#SBATCH --reservation LUMItraining_C
+##SBATCH --reservation ??
 #SBATCH --job-name=check                
 #SBATCH --constraint=                   
 #SBATCH --time=00:10:00                 # Job time limit (HH:MM:SS)
@@ -12,66 +12,108 @@
 #SBATCH --nodes=3 
 #SBATCH --hint=multithread
 
-EXE="xthi"
+EXE="xthi_mpi_mp"
 
 #This function is used to print a nice output from the xthi program
 XTHI_PRINTER(){
-    sort -k4n -k6n | awk 'BEGIN {
-    printf(" ________________________________________________________________\n")
-    printf("| %-10s | %-8s | %-6s | %-19s | %-7s |\n", "HOSTNAME", "MPI TASK", "THREAD", "      AFFINITY ", " TOTAL")
-    printf("|----------------------------------------------------------------|\n")
-    last_host = ""; last_rank = "" ; host_str "" ; thread_total = 0 ; rank_total = 0
-}
-#only treat lines with "nid"
-/nid/{
-    match($0, /on (nid[0-9]+)/, host)
-    match($0, /rank ([0-9]+)/, rank)
-    match($0, /thread ([0-9]+)/, thread)
-    match($0, /= (.*)\)/, affinity)
+    awk '
+    BEGIN {
+        # Flag to check if we have printed the node summary
+        have_summary=0
+    }
 
-    #each xthi line is a thread
-    thread_total++
+    # Print the initial node summary lines as they are
+    /^Node summary for/ {
+        print
+        have_summary=1
+        next
+    }
 
-    #Calculate the number of value (cores) in affinity
-    affinity_total = 0
-    split(affinity[1], values, ",")
-    for (i in values) {
-        if (values[i] ~ /-/) {
-            split(values[i], range, "-")
-            affinity_total += range[2] - range[1] + 1
+    # Lines that map a node number to a hostname, store them in an array
+    # Example: "Node    0, hostname nid001216, ..."
+    /^Node[[:space:]]+[0-9]+, hostname/ {
+        print
+        # Extract node number
+        match($0, /Node[[:space:]]+([0-9]+)/, n_arr)
+        # Extract hostname
+        match($0, /hostname[[:space:]]+(nid[0-9]+)/, host_arr)
+        node_host[n_arr[1]] = host_arr[1]
+        next
+    }
+
+    # MPI summary line (e.g. "MPI summary: 10 ranks"), print it and then print the table header
+    /^MPI summary:/ {
+        print
+        # Print table header
+        printf(" ________________________________________________________________\n")
+        printf("| %-10s | %-8s | %-6s | %-19s | %-7s |\n", "HOSTNAME", "MPI TASK", "THREAD", "      AFFINITY ", " TOTAL")
+        printf("|----------------------------------------------------------------|\n")
+        last_host=""
+        last_rank=""
+        thread_total=0
+        rank_total=0
+        next
+    }
+
+    # Lines with actual rank/thread/affinity info
+    # Example: "Node    0, rank    0, thread   0, (affinity =    0)"
+    /Node[[:space:]]+[0-9]+, rank[[:space:]]+[0-9]+, thread[[:space:]]+[0-9]+/ {
+        # Extract node number
+        match($0, /Node[[:space:]]+([0-9]+)/, node_arr)
+        # Extract rank number
+        match($0, /rank[[:space:]]+([0-9]+)/, rank_arr)
+        # Extract thread number
+        match($0, /thread[[:space:]]+([0-9]+)/, thread_arr)
+        # Extract affinity value
+        match($0, /\(affinity[[:space:]]*=[[:space:]]*([0-9]+)\)/, affinity_arr)
+
+        # Assign extracted values to scalar variables for clarity
+        node_id = node_arr[1]
+        r = rank_arr[1]
+        t = thread_arr[1]
+        aff_val = affinity_arr[1]
+
+        # Retrieve hostname from the node_host array
+        h = node_host[node_id]
+
+        # Increment the total number of threads encountered
+        thread_total++
+
+        # Here we assume only a single affinity value per line, so total=1
+        # If needed, you can reintroduce logic to parse comma-separated or ranged lists.
+        affinity_total=1
+
+        # Determine how to print the rank column: only show "rank X" for the first thread of that rank
+        if (r == last_rank) {
+            rank_str="   ,,   "
         } else {
-            affinity_total++
+            rank_total++
+            last_rank=r
+            rank_str="rank " r
         }
+
+        # Determine how to print the hostname column: only show the hostname for the first rank of that host
+        if (h == last_host) {
+            host_str="----------"
+        } else {
+            last_host=h
+            host_str=h
+        }
+
+        # Print the formatted line
+        printf("| %10s | %8s | %6d | %-19s | %7d |\n", host_str, rank_str, t, aff_val, affinity_total)
+        next
     }
 
-    # The MPI rank is only displayed once
-    if (rank[1] == last_rank) {
-        # printf ("equal : rank[1](%s), last_rank(%s)", rank[1], last_rank)
-        rank_str = "   ,,   "
-    } else {
-        rank_total++
-        last_rank = rank[1]
-        rank_str = "rank " rank[1]
-    }
-
-    # The hostname is only displayed once
-    if (host[1] == last_host) {
-        # printf ("equal : host[1](%s), last_host(%s)", host[1], last_host)
-        host_str = "----------"
-    } else {
-        # printf ("host[1](%s), last_host(%s)", host[1], last_host)
-        last_host = host[1]
-        host_str = host[1]
-    }
-    
-    # FINAL PRINT
-    printf("| %10s | %8s | %6s | %-19s | %7s |\n", host_str, rank_str, thread[1], affinity[1], affinity_total)
-    
-}
-END{
-    printf("|________________________________________________________________|\n")
-    printf("--> %s MPI ranks with %s threads each (total number of threads: %s)\n", rank_total, thread_total/rank_total, thread_total)
-}'
+    END {
+        # After processing all lines, print the bottom of the table and the summary
+        if (rank_total > 0) {
+            printf("|________________________________________________________________|\n")
+            # Calculate threads per rank = total threads / total ranks
+            # and print a final summary line
+            printf("--> %s MPI ranks with %s threads each (total number of threads: %s)\n", rank_total, thread_total/rank_total, thread_total)
+        }
+    }'
 }
 
 SRUN() {
