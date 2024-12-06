@@ -5,7 +5,7 @@ This Fortran program benchmarks GPU unified memory performance (such as MI300A) 
 
 
 
-### Synchronizing the HPC_Playground Repositories
+### Synchronizing internal and external gitHub repositories
 
 This repository hosts a script (`auto_sync.sh`) that automatically synchronizes changes between the internal HPE GitHub and its public GitHub counterpart.
 
