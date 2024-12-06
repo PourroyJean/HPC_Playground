@@ -41,5 +41,11 @@ elif git merge-base --is-ancestor $PHEAD $OHEAD; then
 else
     # Neither is ancestor of the other → divergence
     echo "The repositories have diverged. Manual conflict resolution is required."
+    echo "To resolve this:"
+    echo "1. On this machine, run 'git pull origin main' and 'git pull public main' (perhaps in a separate branch) to bring all changes locally."
+    echo "2. Resolve any merge conflicts that arise."
+    echo "3. Commit the resolved changes."
+    echo "4. Push the updated, conflict-free branch to both remotes: 'git push origin main' and 'git push public main'."
+    echo "After this, you can rerun this script to continue automatic syncing."
     exit 1
 fi
