@@ -39,6 +39,7 @@ After installing, adapt the `EXE` value in [check_binding.sh](./check_binding.sh
 
 # Result exemple
 Below is an example of the output when using specific OpenMP settings and distributing MPI ranks across nodes on Lumi-C
+See complete results in the [output directory](./output).
 
 ```
 Node summary for    3 nodes:
