@@ -12,7 +12,6 @@
 #SBATCH --nodes=3 
 #SBATCH --hint=multithread
 
-
 EXE="xthi"
 
 #This function is used to print a nice output from the xthi program
@@ -85,18 +84,18 @@ SRUN() {
   wait
 }
 
-
 #Default options
 export OMP_PROC_BIND=close
 export OMP_PLACES=sockets
 export OMP_NUM_THREADS=2
 export OMP_WAIT_POLICY=PASSIVE
 
-
 ##### DISTRIBUTION LEVEL 1 - BETWEEN NODES #####
 SRUN --nodes 3 --ntasks 10 --distribution=block --hint=multithread $EXE 
 SRUN --nodes 3 --ntasks 10 --distribution=cyclic --hint=multithread $EXE
 SRUN --nodes 3 --ntasks 10 --distribution=plane=2 --hint=multithread $EXE 
+
+
 
 ##### DISTRIBUTION LEVEL 2 - INSIDE NODE #####
 
@@ -104,13 +103,13 @@ SRUN --nodes 1 --ntasks 256 --distribution=block:block --hint=multithread $EXE
 SRUN --nodes 1 --ntasks 256 --distribution=block:cyclic --hint=multithread $EXE
 SRUN --nodes 1 --ntasks 128 --distribution=block:fcyclic --hint=multithread $EXE
 
-
 ##### Custom binding
 export bind="0,2,16,18,32,34,48,50"
 SRUN --nodes 1 -n 8 --cpu-bind=map_cpu:${bind} $EXE
 # Hexadecimal mask
 export bind=0x3,0x30000,0x300000000,0x3000000000000 
 SRUN -N 1 -n 4 --cpu-bind=mask_cpu:${bind} $EXE
+
 
 
 ##### DISTRIBUTION LEVEL 3 - THREADS PLACEMENT #####
@@ -147,13 +146,11 @@ export OMP_PLACES=cores
 export OMP_NUM_THREADS=4
 SRUN --nodes 1 -n 8 -c 32 --distribution=block:cyclic: --hint=multithread $EXE
 
-
 #MASTER + threads
 export OMP_PROC_BIND=master
 export OMP_PLACES=threads
 export OMP_NUM_THREADS=4
 SRUN --nodes 1 -n 8 -c 32 --distribution=block:cyclic: --hint=multithread $EXE
-
 
 #MASTER + cores
 export OMP_PROC_BIND=master
