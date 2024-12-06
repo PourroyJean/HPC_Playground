@@ -1,7 +1,7 @@
 # Projects
 
 ## [OpenACC_Ftn_Unified](https://github.com/PourroyJean/HPC_Playground/tree/master/OpenACC_Ftn_Unified)  
-This Fortran program benchmarks GPU unified memory performance (such as mi300A) using OpenACC directives. It performs element-wise multiplication of large square matrices to measure execution time, memory bandwidth (GB/s), and computational throughput (GFLOPS).
+This Fortran program benchmarks GPU unified memory performance (such as MI300A) using OpenACC directives. It performs element-wise multiplication of large square matrices to measure execution time, memory bandwidth (GB/s), and computational throughput (GFLOPS).
 
 
 
