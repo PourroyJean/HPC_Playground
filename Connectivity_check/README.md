@@ -29,4 +29,4 @@ This project provides a simple Bash-based connectivity checker that regularly te
 3. Populate `hosts.txt` with the hosts you want to monitor.
 4. Run the script:
    ```bash
-   ./check_server.sh
+   ./run.sh
