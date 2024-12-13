@@ -20,16 +20,41 @@ PREV_FAILED_HOSTS=()
 
 ######################################
 # FUNCTION: check_host
-#   Attempts to connect via proxy and retrieve the SSH banner. 
-#   Returns "<return_code>|<banner>".
+#   Checks the accessibility of a host, logs the result, and updates the appropriate array.
 ######################################
 check_host() {
     local host="$1"
-    # Attempt to connect and read the SSH banner
-    OUTPUT=$($NC_CMD --proxy "$PROXY" --proxy-type http "$host" "$PORT" -w"$TIMEOUT" < /dev/null 2>/dev/null)
-    RET=$?
-    echo "$RET|$OUTPUT"
+    local timestamp="$2"
+    local retries=3
+    local attempt=1
+    local output=""
+    local retcode=1
+
+    # Retry logic
+    while [ $attempt -le $retries ]; do
+        output=$(ncat --proxy "$PROXY" --proxy-type http "$host" "$PORT" -w"$TIMEOUT" < /dev/null 2>/dev/null)
+        retcode=$?
+
+        if [[ -n "$output" ]]; then
+            break
+        fi
+
+        # Increment attempt and retry
+        attempt=$((attempt + 1))
+        sleep 1  # Small delay before retrying
+    done
+
+    # Check if the output starts with "SSH-"
+    if [[ $output == SSH-* ]]; then
+        log_result "$timestamp" "$host" "accessible" "$retcode"
+        SUCCESS_HOSTS+=("$host")
+    else
+        log_result "$timestamp" "$host" "inaccessible" "$retcode"
+        FAILED_HOSTS+=("$host")
+    fi
 }
+
+
 
 ######################################
 # FUNCTION: log_result
@@ -69,20 +94,9 @@ while true; do
 
     # Loop over each host and perform the check
     for HOST in "${HOSTS[@]}"; do
-        RESULT=$(check_host "$HOST")
-        RET="${RESULT%%|*}"
-        OUTPUT="${RESULT#*|}"
-
-        # If the banner starts with "SSH-", we consider the host accessible
-        if [[ $OUTPUT == SSH-* ]]; then
-            log_result "$TEST_TIME" "$HOST" "accessible" "$RET"
-            SUCCESS_HOSTS+=("$HOST")
-        else
-            # No valid SSH banner found
-            log_result "$TEST_TIME" "$HOST" "inaccessible" "$RET"
-            FAILED_HOSTS+=("$HOST")
-        fi
+        check_host "$HOST" "$TEST_TIME"
     done
+
 
     # Sort the arrays to compare states easily
     IFS=$'\n' sorted_failed_current=($(sort <<<"${FAILED_HOSTS[*]}"))
@@ -108,7 +122,11 @@ while true; do
             
             BODY+="\nRegards,\nYour monitoring script"
             
-            send_alert "$SUBJECT" "$BODY"
+            if [ "$SEND_EMAIL" == "true" ]; then
+                send_alert "$SUBJECT" "$BODY"
+            else
+                echo -e "$BODY"
+            fi
         fi
     else
         # No inaccessible hosts now; if previously there were some, send a recovery email
@@ -125,3 +143,5 @@ while true; do
     # Wait before the next check
     sleep "$INTERVAL"
 done
+
+
