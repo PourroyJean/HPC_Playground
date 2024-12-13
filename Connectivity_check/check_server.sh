@@ -92,7 +92,7 @@ while true; do
     if [ ${#FAILED_HOSTS[@]} -gt 0 ]; then
         # If current failures differ from previous failures, send an alert
         if [ "${sorted_failed_current[*]}" != "${sorted_failed_prev[*]}" ]; then
-            SUBJECT="Alert: Some hosts are not accessible"
+            SUBJECT="[LR4 Alert] - Some hosts are not accessible"
             
             BODY="Hello,\n\n"
             BODY+="Here are the results of the latest check (executed at $TEST_TIME):\n\n"
