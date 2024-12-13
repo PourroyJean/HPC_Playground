@@ -7,6 +7,8 @@ TIMEOUT=5
 LOGFILE="./server_check.log"
 INTERVAL=60
 RECIPIENT="jean.pourroy@hpe.com"
+SEND_EMAIL=true  # Set to 'false' to disable email notifications
+
 
 # Ensure required commands are available
 NC_CMD=$(command -v ncat)
