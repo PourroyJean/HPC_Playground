@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LR4 Connectivity Check</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>LR4 Connectivity Check</h1>
+        
+        <div class="summary-box">
+            <div class="summary-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Total Nodes:</span>
+                    <span class="stat-value" id="totalNodes">{{ summary.total_nodes }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Accessible:</span>
+                    <span class="stat-value accessible" id="accessibleNodes">{{ summary.accessible_nodes }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Inaccessible:</span>
+                    <span class="stat-value inaccessible" id="inaccessibleNodes">{{ summary.inaccessible_nodes }}</span>
+                </div>
+            </div>
+            <div class="last-check">
+                Last Check: <span id="lastCheckTime">{{ summary.latest_timestamp.strftime('%d %B %Y %H:%M') }}</span>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search by IP...">
+            </div>
+            
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="accessible">✓ Accessible</button>
+                <button class="filter-btn" data-filter="inaccessible">✗ Inaccessible</button>
+            </div>
+            
+            <div class="sort-options">
+                <select id="sortSelect">
+                    <option value="status">Sort by Status</option>
+                    <option value="ip">Sort by IP</option>
+                    <option value="time">Sort by Last Check</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="status-grid" id="statusGrid">
+            {% for host, status in hosts %}
+            <div class="status-card {{ status.status.strip() }}" data-host="{{ host }}" data-status="{{ status.status.strip() }}">
+                <div class="status-icon">
+                    {% if status.status.strip() == 'accessible' %}
+                        <span class="icon">✓</span>
+                    {% else %}
+                        <span class="icon">✗</span>
+                    {% endif %}
+                </div>
+                <h2>{{ host }}</h2>
+                <p class="timestamp">Last checked: {{ status.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                <div class="history-details">
+                    <h3>Recent History</h3>
+                    <div class="history-timeline">
+                        {% for entry in history[host]|reverse %}
+                        <div class="timeline-entry {{ entry.status.strip() }}">
+                            <span class="time">{{ entry.timestamp.strftime('%Y-%m-%d %H:%M') }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <footer>
+            <p>Last updated: <span id="updateTime">{{ current_time.strftime('%Y-%m-%d %H:%M:%S') }}</span></p>
+            <button id="exportBtn" class="export-btn">Export Data</button>
+        </footer>
+    </div>
+
+    <script>
+        document.querySelectorAll('.status-card').forEach(card => {
+            card.addEventListener('click', () => {
+                card.classList.toggle('expanded');
+            });
+        });
+
+        function updateStatus() {
+            fetch('/update')
+                .then(response => response.json())
+                .then(data => {
+                    // Update each host's status
+                    for (const [host, status] of Object.entries(data.hosts)) {
+                        const card = document.querySelector(`[data-host="${host}"]`);
+                        if (card) {
+                            card.className = `status-card ${status.status.trim()}${card.classList.contains('expanded') ? ' expanded' : ''}`;
+                            card.querySelector('.timestamp').textContent = `Last checked: ${status.timestamp}`;
+                            
+                            // Update history with new timestamp format
+                            const historyHtml = data.history[host].map(entry => `
+                                <div class="timeline-entry ${entry.status.trim()}">
+                                    <span class="time">${entry.timestamp.split(' ')[0]} ${entry.timestamp.split(' ')[1].substring(0, 5)}</span>
+                                </div>
+                            `).join('');
+                            card.querySelector('.history-timeline').innerHTML = historyHtml;
+                        }
+                    }
+                    
+                    // Update summary
+                    document.getElementById('totalNodes').textContent = data.summary.total_nodes;
+                    document.getElementById('accessibleNodes').textContent = data.summary.accessible_nodes;
+                    document.getElementById('inaccessibleNodes').textContent = data.summary.inaccessible_nodes;
+                    document.getElementById('lastCheckTime').textContent = data.summary.latest_timestamp;
+                    
+                    // Update timestamp
+                    document.getElementById('updateTime').textContent = data.current_time;
+                });
+        }
+
+        // Update every 30 seconds
+        setInterval(updateStatus, 30000);
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', filterCards);
+
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                filterCards();
+            });
+        });
+
+        // Sort functionality
+        document.getElementById('sortSelect').addEventListener('change', function() {
+            sortCards(this.value);
+        });
+
+        // Export functionality
+        document.getElementById('exportBtn').addEventListener('click', exportData);
+
+        function filterCards() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const activeFilter = document.querySelector('.filter-btn.active').dataset.filter;
+            
+            document.querySelectorAll('.status-card').forEach(card => {
+                const host = card.dataset.host.toLowerCase();
+                const status = card.dataset.status;
+                
+                const matchesSearch = host.includes(searchTerm);
+                const matchesFilter = activeFilter === 'all' || status === activeFilter;
+                
+                if (matchesSearch && matchesFilter) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        function sortCards(sortBy) {
+            const grid = document.getElementById('statusGrid');
+            const cards = Array.from(grid.children);
+            
+            cards.sort((a, b) => {
+                switch(sortBy) {
+                    case 'ip':
+                        return a.dataset.host.localeCompare(b.dataset.host, undefined, {numeric: true});
+                    case 'status':
+                        return b.dataset.status.localeCompare(a.dataset.status);
+                    case 'time':
+                        const timeA = a.querySelector('.timestamp').textContent;
+                        const timeB = b.querySelector('.timestamp').textContent;
+                        return timeB.localeCompare(timeA);
+                }
+            });
+            
+            cards.forEach(card => grid.appendChild(card));
+        }
+
+        function exportData() {
+            fetch('/update')
+                .then(response => response.json())
+                .then(data => {
+                    const exportData = {
+                        timestamp: data.current_time,
+                        summary: data.summary,
+                        nodes: data.hosts,
+                        history: data.history
+                    };
+                    
+                    const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `lr4-status-${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                });
+        }
+
+        // Update the existing updateStatus function to maintain filters and sorting
+        const originalUpdateStatus = updateStatus;
+        updateStatus = function() {
+            originalUpdateStatus();
+            const activeSort = document.getElementById('sortSelect').value;
+            setTimeout(() => {
+                filterCards();
+                sortCards(activeSort);
+            }, 100);
+        };
+    </script>
+</body>
+</html> 
