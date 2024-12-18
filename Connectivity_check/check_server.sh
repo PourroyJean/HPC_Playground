@@ -29,9 +29,9 @@ FIRST_RUN=true
 #   $1: Timestamp
 #   $2: Hostname
 #   $3: Status (accessible/inaccessible)
-#   $4: Return code
+#   $4: Attempt number
 log_result() {
-    echo "$1,$2,$3,ret=$4" >> "$TEST_LOGFILE"
+    echo "$1,$2,$3,$4" >> "$TEST_LOGFILE"
 }
 
 # Sends an email alert with the provided subject and body
@@ -43,57 +43,6 @@ send_alert() {
     echo "Email alert sent to $RECIPIENT" >> "$APP_LOGFILE"
 }
 
-# Checks host accessibility using `ncat` with retries and logging
-# Parameters:
-#   $1: Hostname
-#   $2: Timestamp
-#   $3: Enable verbose logging (true/false)
-# Updates: SUCCESS_HOSTS or TEMP_FAILED_HOSTS
-check_host() {
-    local host="$1" timestamp="$2" do_log="${3:-false}" output retcode
-
-    # Attempt 1: Basic connection check
-    output=$(ncat --proxy "$PROXY" --proxy-type http "$host" "$PORT" -w"$TIMEOUT" < /dev/null 2>&1)
-    retcode=$?
-
-    # Host accessible if output contains SSH banner
-    if [[ $output == *"SSH-"* ]]; then
-        [[ "$do_log" == "true" ]] && log_result "$timestamp" "$host" "accessible" "$retcode"
-        SUCCESS_HOSTS+=("$host")
-        return 0
-    fi
-
-    # Attempt 2: Verbose connection check with extended timeout
-    if [[ "$do_log" == "true" ]]; then
-        local start_time=$(date +%s.%N)
-        output=$(ncat -v --proxy "$PROXY" --proxy-type http "$host" "$PORT" -w"$((TIMEOUT*2))" < /dev/null 2>&1)
-        retcode=$?
-        local duration=$(echo "$(date +%s.%N) - $start_time" | bc)
-
-        if [[ $output == *"SSH-"* ]]; then
-            log_result "$timestamp" "$host" "accessible" "$retcode"
-            SUCCESS_HOSTS+=("$host")
-            return 0
-        fi
-
-        # Log details of the verbose failed attempt
-        {
-            echo "=== Detailed connection attempt for $host ==="
-            echo "Timestamp: $timestamp"
-            echo "Command: ncat -v --proxy $PROXY --proxy-type http $host $PORT -w$((TIMEOUT*2))"
-            echo "Return code: $retcode"
-            echo "Duration: ${duration}s"
-            echo "Output:"
-            echo "$output"
-            echo "==================================="
-        } >> "$APP_LOGFILE"
-
-        log_result "$timestamp" "$host" "inaccessible" "$retcode"
-    fi
-
-    TEMP_FAILED_HOSTS+=("$host")
-    return 1
-}
 
 # Prepares the alert message containing the check results
 # Parameters:
@@ -127,56 +76,99 @@ prepare_alert_message() {
     echo -e "$message"
 }
 
+# Checks host accessibility using `ncat` with two different modes
+# Parameters:
+#   $1: Hostname
+#   $2: Timestamp
+#   $3: Enable verbose logging (true/false)
+#   $4: Attempt number (1-MAX_ATTEMPT for first pass, MAX_ATTEMPT+1 for second pass)
+# Returns: 0 if host is accessible, 1 otherwise
+check_host() {
+    local host="$1" timestamp="$2" do_log="${3:-false}" attempt="${4:-1}" output
+
+    if [[ "$do_log" == "false" ]]; then
+        # Mode 1: Quick check with basic timeout
+        output=$(ncat --proxy "$PROXY" --proxy-type http "$host" "$PORT" -w"$TIMEOUT" < /dev/null 2>&1)
+        if [[ $output == *"SSH-"* ]]; then
+            log_result "$timestamp" "$host" "accessible" "$attempt"
+            return 0
+        else
+            return 1
+        fi
+    else
+        # Mode 2: Verbose check with extended timeout and detailed logging
+        output=$(ncat -v --proxy "$PROXY" --proxy-type http "$host" "$PORT" -w"$((TIMEOUT*2))" < /dev/null 2>&1)
+        if [[ $output == *"SSH-"* ]]; then
+            log_result "$timestamp" "$host" "accessible" "$attempt"
+            return 0
+        else
+            # Log details of the verbose failed attempt
+            {
+            echo "=== Detailed connection attempt for $host ==="
+            echo "Timestamp: $timestamp"
+            echo "Command: ncat -v --proxy $PROXY --proxy-type http $host $PORT -w$((TIMEOUT*2))"
+            echo "Attempt number: $attempt"
+            echo "Output:"
+            echo "$output"
+            echo "==================================="
+            } >> "$APP_LOGFILE"
+            log_result "$timestamp" "$host" "inaccessible" "$attempt"
+            return 1
+        fi
+
+
+    fi
+}
+
+
 # Main monitoring loop: continuously checks hosts and logs results
 while true; do
     source ./config.sh  # Reload configuration
-
-    FAILED_HOSTS=()
-    SUCCESS_HOSTS=()
-    NEWLY_FAILED_HOSTS=()
-    TEMP_FAILED_HOSTS=()
+    SUCCESS_HOSTS=()        # Will contain all currently successful hosts
+    FAILED_HOSTS=()         # Will contain all currently failed hosts
+    NEWLY_FAILED_HOSTS=()   # Will contain hosts that newly failed this iteration
+    TEMP_FAILED_HOSTS=()    # Temporary storage for first pass failures
 
     # First pass: Non-verbose host checks with retries
     for HOST in "${HOSTS[@]}"; do
         host_failed=true
-        for attempt in $(seq 1 3); do
+        for attempt in $(seq 1 "$MAX_ATTEMPT"); do
+            sleep "$HOST_DELAY"
             TEST_TIME=$(date -Iseconds)
-            if check_host "$HOST" "$TEST_TIME" "false"; then
+            if check_host "$HOST" "$TEST_TIME" "false" "$attempt"; then
+                SUCCESS_HOSTS+=("$HOST")
                 host_failed=false
                 break
             fi
-            sleep "$HOST_DELAY"
+            
         done
         [[ "$host_failed" == "true" ]] && TEMP_FAILED_HOSTS+=("$HOST")
     done
 
     # Second pass: Verbose retries for failed hosts
     if [[ ${#TEMP_FAILED_HOSTS[@]} -gt 0 ]]; then
-        echo "Retrying failed hosts: ${TEMP_FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
+        [[ "$DEBUG" == "true" ]] && echo "Retrying failed hosts: ${TEMP_FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
         for HOST in "${TEMP_FAILED_HOSTS[@]}"; do
+            sleep "$HOST_DELAY"  # Add sleep between different hosts
             TEST_TIME=$(date -Iseconds)
-            if check_host "$HOST" "$TEST_TIME" "true"; then
-                echo "Host $HOST recovered after retry" >> "$APP_LOGFILE"
+            if check_host "$HOST" "$TEST_TIME" "true" "$((MAX_ATTEMPT + 1))"; then
+                SUCCESS_HOSTS+=("$HOST")
+                [[ "$DEBUG" == "true" ]] && echo "Host $HOST recovered after retry" >> "$APP_LOGFILE"
             else
+                FAILED_HOSTS+=("${HOST}:${TEST_TIME}")
                 if [[ "$FIRST_RUN" != "true" ]]; then
-                    if [[ " ${PREV_FAILED_HOSTS[@]} " =~ " ${HOST}:" ]]; then
-                        FAILED_HOSTS+=("${HOST}:${TEST_TIME}")
-                    else
+                    if [[ ! " ${PREV_FAILED_HOSTS[@]} " =~ " ${HOST}:" ]]; then
+                        # Host is newly failed this iteration
                         NEWLY_FAILED_HOSTS+=("${HOST}:${TEST_TIME}")
                         echo "$TEST_TIME,$HOST" >> "$FAILED_HOSTS_LOG"
                     fi
                 fi
             fi
-            sleep "$HOST_DELAY"
+            
         done
     fi
 
-    # Log successful hosts
-    for HOST in "${SUCCESS_HOSTS[@]}"; do
-        if [[ ! " ${TEMP_FAILED_HOSTS[@]} " =~ " ${HOST} " ]]; then
-            log_result "$(date -Iseconds)" "$HOST" "accessible" "0"
-        fi
-    done
+
 
     # Send alerts if there are newly failed hosts
     if [[ ${#NEWLY_FAILED_HOSTS[@]} -gt 0 ]]; then
@@ -195,4 +187,19 @@ while true; do
     PREV_FAILED_HOSTS=("${FAILED_HOSTS[@]}")
     echo "Check cycle completed at $(date)" >> "$APP_LOGFILE"
     sleep "$INTERVAL"
+
+        # Log results only if DEBUG is true
+    if [[ "$DEBUG" == "true" ]]; then
+        echo "Successful hosts: ${SUCCESS_HOSTS[*]}" >> "$APP_LOGFILE"
+        echo "Failed hosts: ${FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
+        echo "Newly failed hosts: ${NEWLY_FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
+        echo "Total number of hosts: ${#HOSTS[@]}" >> "$APP_LOGFILE"
+        echo "Number of successful hosts: ${#SUCCESS_HOSTS[@]}" >> "$APP_LOGFILE"
+        echo "Number of failed hosts: ${#FAILED_HOSTS[@]}" >> "$APP_LOGFILE"
+        echo "Number of newly failed hosts: ${#NEWLY_FAILED_HOSTS[@]}" >> "$APP_LOGFILE"
+        total_processed=$((${#SUCCESS_HOSTS[@]} + ${#FAILED_HOSTS[@]}))
+        if [[ $total_processed -ne ${#HOSTS[@]} ]]; then
+            echo "WARNING: Not all hosts were processed! Expected ${#HOSTS[@]}, got $total_processed" >> "$APP_LOGFILE"
+        fi
+    fi
 done
