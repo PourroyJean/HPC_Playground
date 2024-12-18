@@ -5,6 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LR4 Connectivity Check</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .full-history-section {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-width: 80%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .full-history-section .close-history-btn {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            font-size: 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+        }
+
+        /* Add overlay background */
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -30,24 +68,59 @@
             </div>
         </div>
 
+        <div class="failed-hosts-section">
+            <h2>Recent Failed Hosts</h2>
+            <div class="failed-hosts-table-container">
+                <table class="failed-hosts-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Host</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in failed_hosts %}
+                        <tr>
+                            <td>{{ entry.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>{{ entry.host }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <button class="show-failed-history">Show Full History</button>
+        </div>
+
         <div class="control-panel">
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Search by IP...">
+            <div class="control-panel-left">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search by IP...">
+                </div>
+                
+                <div class="filter-buttons">
+                    <div class="toggle-filter">
+                        <button class="toggle-btn active" data-filter="accessible">✓ Accessible</button>
+                        <button class="toggle-btn" data-filter="inaccessible">✗ Inaccessible</button>
+                        <button class="toggle-btn clear-filter">✕</button>
+                    </div>
+                    <div class="toggle-filter">
+                        <button class="toggle-btn active" data-filter="with-owner">With Owner</button>
+                        <button class="toggle-btn" data-filter="no-owner">No Owner</button>
+                        <button class="toggle-btn clear-filter">✕</button>
+                    </div>
+                </div>
+                
+                <div class="sort-options">
+                    <select id="sortSelect">
+                        <option value="status">Sort by Status</option>
+                        <option value="ip">Sort by IP</option>
+                        <option value="time">Sort by Last Check</option>
+                        <option value="uptime">Sort by Uptime</option>
+                    </select>
+                </div>
             </div>
-            
-            <div class="filter-buttons">
-                <button class="filter-btn active" data-filter="all">All</button>
-                <button class="filter-btn" data-filter="accessible">✓ Accessible</button>
-                <button class="filter-btn" data-filter="inaccessible">✗ Inaccessible</button>
-            </div>
-            
-            <div class="sort-options">
-                <select id="sortSelect">
-                    <option value="status">Sort by Status</option>
-                    <option value="ip">Sort by IP</option>
-                    <option value="time">Sort by Last Check</option>
-                </select>
-            </div>
+
+            <button id="toggleAllHistories" class="toggle-histories-btn">Expand All Histories</button>
         </div>
 
         <div class="status-grid" id="statusGrid">
@@ -60,20 +133,62 @@
                         <span class="icon">✗</span>
                     {% endif %}
                 </div>
-                <h2>{{ host }}</h2>
+                <h2>{{ host }} <span class="uptime-inline" data-uptime="{{ status.uptime }}">({{ status.uptime }}%)</span></h2>
                 <p class="timestamp">Last checked: {{ status.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                <p class="owner" data-owner="{{ status.owner }}">Owner: {{ status.owner }}</p>
                 <div class="history-details">
                     <h3>Recent History</h3>
                     <div class="history-timeline">
-                        {% for entry in history[host]|reverse %}
+                        {% for entry in history[host] %}
                         <div class="timeline-entry {{ entry.status.strip() }}">
                             <span class="time">{{ entry.timestamp.strftime('%Y-%m-%d %H:%M') }}</span>
                         </div>
                         {% endfor %}
                     </div>
+                    <p class="avg-attempts">Average attempts: {{ status.avg_attempt }}</p>
+                    <button class="show-full-history" data-host="{{ host }}">Show Full History</button>
                 </div>
             </div>
             {% endfor %}
+        </div>
+
+        <div class="full-history-section" style="display: none;">
+            <div class="full-history-header">
+                <h2>Complete History for <span class="host-name"></span></h2>
+                <button class="close-history-btn">×</button>
+            </div>
+            <div class="full-history-content">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Status</th>
+                            <th>Return Code</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="full-history-section full-failed-history-section" style="display: none;">
+            <div class="full-history-header">
+                <h2>Failed Hosts History</h2>
+                <button class="close-history-btn">×</button>
+            </div>
+            <div class="full-history-content">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Host</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <footer>
@@ -99,6 +214,12 @@
                         if (card) {
                             card.className = `status-card ${status.status.trim()}${card.classList.contains('expanded') ? ' expanded' : ''}`;
                             card.querySelector('.timestamp').textContent = `Last checked: ${status.timestamp}`;
+                            const ownerElement = card.querySelector('.owner');
+                            ownerElement.textContent = `Owner: ${status.owner}`;
+                            ownerElement.dataset.owner = status.owner;
+                            const uptimeSpan = card.querySelector('.uptime-inline');
+                            uptimeSpan.textContent = `(${status.uptime}%)`;
+                            uptimeSpan.dataset.uptime = status.uptime;
                             
                             // Update history with new timestamp format
                             const historyHtml = data.history[host].map(entry => `
@@ -107,6 +228,9 @@
                                 </div>
                             `).join('');
                             card.querySelector('.history-timeline').innerHTML = historyHtml;
+                            
+                            // Update average attempts
+                            card.querySelector('.avg-attempts').textContent = `Average attempts: ${status.avg_attempt}`;
                         }
                     }
                     
@@ -118,6 +242,17 @@
                     
                     // Update timestamp
                     document.getElementById('updateTime').textContent = data.current_time;
+                    
+                    // Update failed hosts table if needed
+                    if (data.failed_hosts) {
+                        const tbody = document.querySelector('.failed-hosts-table tbody');
+                        tbody.innerHTML = data.failed_hosts.map(entry => `
+                            <tr>
+                                <td>${entry.timestamp}</td>
+                                <td>${entry.host}</td>
+                            </tr>
+                        `).join('');
+                    }
                 });
         }
 
@@ -127,12 +262,21 @@
         // Search functionality
         document.getElementById('searchInput').addEventListener('input', filterCards);
 
-        // Filter buttons
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                filterCards();
+        // Update the click handlers for toggle buttons
+        document.querySelectorAll('.toggle-filter').forEach(toggle => {
+            const buttons = toggle.querySelectorAll('.toggle-btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    if (this.classList.contains('clear-filter')) {
+                        // Remove active class from all buttons in this group
+                        buttons.forEach(b => b.classList.remove('active'));
+                    } else {
+                        // Toggle active state within this toggle group
+                        buttons.forEach(b => b.classList.remove('active'));
+                        this.classList.add('active');
+                    }
+                    filterCards();
+                });
             });
         });
 
@@ -146,16 +290,27 @@
 
         function filterCards() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const activeFilter = document.querySelector('.filter-btn.active').dataset.filter;
+            const accessibilityBtn = document.querySelector('.toggle-filter:first-child .toggle-btn.active');
+            const ownerBtn = document.querySelector('.toggle-filter:last-child .toggle-btn.active');
+            const accessibilityFilter = accessibilityBtn ? accessibilityBtn.dataset.filter : null;
+            const ownerFilter = ownerBtn ? ownerBtn.dataset.filter : null;
             
             document.querySelectorAll('.status-card').forEach(card => {
                 const host = card.dataset.host.toLowerCase();
                 const status = card.dataset.status;
+                const owner = card.querySelector('.owner').dataset.owner;
+                
+                const matchesAccessibility = !accessibilityFilter || 
+                    (accessibilityFilter === 'accessible' && status === 'accessible') ||
+                    (accessibilityFilter === 'inaccessible' && status === 'inaccessible');
+                
+                const matchesOwner = !ownerFilter || 
+                    (ownerFilter === 'with-owner' && owner !== 'no owner') ||
+                    (ownerFilter === 'no-owner' && owner === 'no owner');
                 
                 const matchesSearch = host.includes(searchTerm);
-                const matchesFilter = activeFilter === 'all' || status === activeFilter;
                 
-                if (matchesSearch && matchesFilter) {
+                if (matchesSearch && matchesAccessibility && matchesOwner) {
                     card.style.display = '';
                 } else {
                     card.style.display = 'none';
@@ -172,11 +327,22 @@
                     case 'ip':
                         return a.dataset.host.localeCompare(b.dataset.host, undefined, {numeric: true});
                     case 'status':
-                        return b.dataset.status.localeCompare(a.dataset.status);
+                        const statusA = a.dataset.status;
+                        const statusB = b.dataset.status;
+                        if (statusA === statusB) {
+                            return a.dataset.host.localeCompare(b.dataset.host, undefined, {numeric: true});
+                        }
+                        return statusA === 'accessible' ? -1 : 1;
                     case 'time':
                         const timeA = a.querySelector('.timestamp').textContent;
                         const timeB = b.querySelector('.timestamp').textContent;
                         return timeB.localeCompare(timeA);
+                    case 'uptime':
+                        const uptimeA = parseInt(a.querySelector('.uptime-inline').dataset.uptime) || 0;
+                        const uptimeB = parseInt(b.querySelector('.uptime-inline').dataset.uptime) || 0;
+                        return uptimeB - uptimeA;
+                    default:
+                        return 0;
                 }
             });
             
@@ -214,6 +380,122 @@
                 sortCards(activeSort);
             }, 100);
         };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const fullHistorySection = document.querySelector('.full-history-section');
+            const overlay = document.querySelector('.overlay');
+            
+            // Handle show full history button clicks
+            document.querySelectorAll('.show-full-history').forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.stopPropagation();  // Prevent the click from reaching the card
+                    const host = this.dataset.host;
+                    fetchFullHistory(host);
+                });
+            });
+            
+            // Handle close button
+            document.querySelector('.close-history-btn').addEventListener('click', function() {
+                fullHistorySection.style.display = 'none';
+                overlay.style.display = 'none';
+            });
+            
+            // Close on overlay click
+            overlay.addEventListener('click', function() {
+                fullHistorySection.style.display = 'none';
+                overlay.style.display = 'none';
+            });
+            
+            function fetchFullHistory(host) {
+                fetch(`/full_history/${host}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(err => {
+                                throw new Error(err.error || 'Failed to fetch history');
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (!data.history || data.history.length === 0) {
+                            throw new Error('No history found for this host');
+                        }
+                        
+                        document.querySelector('.full-history-section .host-name').textContent = host;
+                        
+                        const tbody = document.querySelector('.full-history-section .history-table tbody');
+                        tbody.innerHTML = data.history.map(entry => `
+                            <tr class="${entry.status.trim()}">
+                                <td>${entry.timestamp}</td>
+                                <td>${entry.status}</td>
+                                <td>${entry.retcode}</td>
+                            </tr>
+                        `).join('');
+                        
+                        fullHistorySection.style.display = 'block';
+                        overlay.style.display = 'block';
+                    })
+                    .catch(error => {
+                        console.error('Error fetching history:', error);
+                        alert(error.message || 'Error fetching history. Please try again.');
+                    });
+            }
+
+            // Set the default sort option to 'status'
+            document.getElementById('sortSelect').value = 'status';
+            // Apply the initial sort
+            sortCards('status');
+        });
+
+        document.querySelector('.show-failed-history').addEventListener('click', function() {
+            fetch('/failed_hosts_history')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector('.full-failed-history-section .history-table tbody');
+                    tbody.innerHTML = data.history.map(entry => `
+                        <tr>
+                            <td>${entry.timestamp}</td>
+                            <td>${entry.host}</td>
+                        </tr>
+                    `).join('');
+                    
+                    document.querySelector('.full-failed-history-section').style.display = 'block';
+                });
+        });
+
+        document.querySelector('.full-failed-history-section .close-history-btn').addEventListener('click', function() {
+            document.querySelector('.full-failed-history-section').style.display = 'none';
+        });
+
+        // Close on click outside
+        document.addEventListener('click', function(event) {
+            const section = document.querySelector('.full-failed-history-section');
+            if (event.target === section) {
+                section.style.display = 'none';
+            }
+        });
+
+        let allHistoriesExpanded = false;
+        
+        document.getElementById('toggleAllHistories').addEventListener('click', function() {
+            const cards = document.querySelectorAll('.status-card');
+            allHistoriesExpanded = !allHistoriesExpanded;
+            
+            cards.forEach(card => {
+                if (allHistoriesExpanded) {
+                    card.classList.add('expanded');
+                } else {
+                    card.classList.remove('expanded');
+                }
+            });
+            
+            // Update button text
+            this.textContent = allHistoriesExpanded ? 'Collapse All Histories' : 'Expand All Histories';
+        });
+
     </script>
+
+    <!-- Add overlay div -->
+    <div class="overlay"></div>
 </body>
 </html> 

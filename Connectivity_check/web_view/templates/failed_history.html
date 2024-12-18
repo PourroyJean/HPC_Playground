@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="failed-history-container">
+    <h2>Failed Hosts History</h2>
+    <table class="failed-history-table">
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Host</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in history %}
+            <tr>
+                <td>{{ entry.timestamp }}</td>
+                <td>{{ entry.host }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %} 
