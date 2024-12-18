@@ -1,32 +1,91 @@
-# Connectivity Checker
+# SSH Connectivity Monitor
 
-This project provides a simple Bash-based connectivity checker that regularly tests the accessibility of multiple hosts over SSH via a specified proxy. If any hosts become unreachable, the script will send email alerts and log the results.
+This tool monitors SSH connectivity to a list of hosts through a proxy server. It provides real-time monitoring, logging, and email notifications for connectivity changes.
 
 ## Features
-- Periodically checks the connectivity of a list of hosts.
-- Logs all results (accessible/inaccessible) with timestamps and return codes.
-- Sends email notifications when hosts transition from accessible to inaccessible or vice versa.
-- Hosts are easily managed by adding/removing them in `hosts.txt`.
 
-## Files
-- **config.sh**: Configuration file for proxy settings, interval, timeout, logfile, and email recipient.
-- **hosts.txt**: List of hosts to be checked (one per line).
-- **check_server.sh**: Main script that performs the checks and sends notifications.
-- **server_check.log**: Log file where all results are recorded.
+- Monitors SSH connectivity (port 22) through an HTTP proxy
+- Handles multiple retry attempts before marking a host as inaccessible
+- Maintains history of connectivity status
+- Sends email alerts when hosts become inaccessible
+- Provides a web interface to view current and historical status
+- Tracks host ownership information
 
 ## Requirements
 - `ncat` (for connecting via proxy)
 - `mail` command (e.g., `mailutils` or `bsd-mailx` for sending emails)
+- Python 3 with Flask (for web interface)
 - A valid proxy address and port specified in `config.sh`
-- A `hosts.txt` file containing the list of hosts to test.
 
-## How to Use
-1. Clone or download this repository to your machine.
-2. Update `config.sh` with your desired settings:
-   - **PROXY**: `<proxy_host:port>`
-   - **INTERVAL**: Frequency (in seconds) to run checks.
-   - **RECIPIENT**: Email address for alerts.
-3. Populate `hosts.txt` with the hosts you want to monitor.
-4. Run the script:
+## Setup and Configuration
+
+1. Copy the LR4 list from SharePoint:
+   - Copy the Excel content from SharePoint
+   - Paste it into `LR4_list.csv` (tab-separated format)
+
+2. Generate the hosts file:
+   ```bash
+   ./process_lr4.sh
+   ```
+   This will create `hosts.csv` with proper formatting and owner information.
+
+3. Update `config.sh` with your settings:
+   ```bash
+   PROXY="proxy:port"        # HTTP proxy server
+   PORT=22                   # SSH port to check
+   INTERVAL=1800            # Check interval in seconds
+   TIMEOUT=1               # Connection timeout
+   HOST_DELAY=1            # Delay between host checks
+   MAX_ATTEMPT=6           # Maximum retry attempts
+   RECIPIENT="email@domain.com"  # Alert recipient
+   SEND_EMAIL=true         # Enable/disable email alerts
+   DEBUG=true             # Enable/disable debug logging
+   ```
+
+## Usage
+
+1. Start both the monitoring script and web interface:
    ```bash
    ./run.sh
+   ```
+   This will start both the check_server.sh script and the Flask web server.
+
+   Alternatively, you can run them separately:
+   ```bash
+   # Start just the monitoring
+   ./check_server.sh
+
+   # Start just the web interface
+   cd web_view
+   python app.py
+   ```
+
+## Logs
+
+All logs are stored in the `logs/` directory:
+- `app.log`: Application logs and debug information
+- `server_check.log`: Connectivity check results
+- `failed_hosts.log`: Record of newly failed hosts
+
+## Web Interface
+
+Access the web interface at `http://localhost:5000` to view:
+- Current status of all hosts
+- Uptime statistics
+- Owner information
+- Connection history
+- Failed host history
+
+Features:
+- Filter by status (accessible/inaccessible)
+- Filter by owner status
+- Sort by various criteria
+- Search functionality
+- Expandable history view
+
+## Debug Mode
+
+Enable debug output by setting `DEBUG=true` in config.sh or:
+```bash
+DEBUG=true ./check_server.sh
+```
