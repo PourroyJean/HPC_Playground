@@ -3,9 +3,9 @@
 # File paths
 CHECK_SCRIPT="./check_server.sh"
 WEB_APP="./web_view/app.py"
-CHECK_LOGFILE="./server_check.log"
-CHECK_PIDFILE="./server_check.pid"
+APP_LOGFILE="./logs/app.log"
 WEB_PIDFILE="./web_app.pid"
+CHECK_PIDFILE="./server_check.pid"
 
 # Function to check if a process is running
 check_process() {
@@ -29,14 +29,14 @@ start_check_server() {
     fi
 
     echo "Starting the check server..."
-    nohup "$CHECK_SCRIPT" > "$CHECK_LOGFILE" 2>&1 &
+    nohup "$CHECK_SCRIPT" > "$APP_LOGFILE" 2>&1 &
     echo $! > "$CHECK_PIDFILE"
     sleep 2
 
     if check_process "$CHECK_PIDFILE"; then
         echo "Check server started successfully (PID $(cat $CHECK_PIDFILE))"
     else
-        echo "Error: Failed to start check server. Check $CHECK_LOGFILE for details."
+        echo "Error: Failed to start check server. Check $APP_LOGFILE for details."
         rm -f "$CHECK_PIDFILE"
     fi
 }
@@ -57,7 +57,7 @@ start_web_app() {
     fi
 
     # Start the Flask app with nohup
-    nohup ./venv/bin/python "$WEB_APP" > web_app.log 2>&1 &
+    nohup ./venv/bin/python "$WEB_APP" > logs/web_app.log 2>&1 &
     echo $! > "$WEB_PIDFILE"
     sleep 2
 
@@ -65,7 +65,7 @@ start_web_app() {
         echo "Web app started successfully (PID $(cat $WEB_PIDFILE))"
         echo "Web interface available at: http://localhost:5000"
     else
-        echo "Error: Failed to start web app. Check web_app.log for details."
+        echo "Error: Failed to start web app. Check logs/web_app.log for details."
         rm -f "$WEB_PIDFILE"
     fi
 }
@@ -94,7 +94,7 @@ stop_service() {
         local pid=$(cat "$pidfile")
         if ps -p "$pid" > /dev/null 2>&1; then
             echo "Stopping $service_name (PID $pid)..."
-            kill $pid
+            kill $pid 
             sleep 2
             if ps -p "$pid" > /dev/null 2>&1; then
                 echo "Warning: $service_name did not stop gracefully, forcing..."
@@ -103,6 +103,32 @@ stop_service() {
         fi
         rm -f "$pidfile"
     fi
+}
+
+# Function to stop the server
+stop_server() {
+    echo "Stopping Check Server..."
+    if [ -f "check_server.pid" ]; then
+        kill $(cat check_server.pid) 2>/dev/null
+        rm -f check_server.pid
+        echo "Server stopped."
+    else
+        echo "No PID file found. Server might not be running."
+    fi
+}
+
+# Function to start the server
+start_server() {
+    echo "Starting Check Server..."
+    nohup ./check_server.sh > /dev/null 2>&1 & echo $! > check_server.pid
+    echo "Server started with PID: $(cat check_server.pid)"
+}
+
+# Function to clean logs
+clean_logs() {
+    echo "Cleaning log files..."
+    rm -f logs/failed_hosts.log logs/app.log logs/server_check.log logs/web_app.log
+    echo "Log files removed."
 }
 
 # Main menu
@@ -117,9 +143,10 @@ while true; do
     echo "2) Start/Stop Web App"
     echo "3) Start Both Services"
     echo "4) Stop Both Services"
-    echo "5) Exit"
+    echo "5) Restart Check Server (with clean logs)"
+    echo "6) Exit"
     echo
-    read -p "Select an option (1-5): " choice
+    read -p "Select an option (1-6): " choice
 
     case $choice in
         1)
@@ -145,11 +172,19 @@ while true; do
             stop_service "$WEB_PIDFILE" "web app"
             ;;
         5)
+            echo "Restarting Check Server..."
+            stop_service "$CHECK_PIDFILE" "check server"
+            clean_logs
+            sleep 2  # Give time for processes to fully stop
+            start_check_server
+            echo "Restart complete."
+            ;;
+        6)
             echo "Exiting..."
             exit 0
             ;;
         *)
-            echo "Invalid option. Please select 1-5."
+            echo "Invalid option. Please select 1-6."
             ;;
     esac
 done
