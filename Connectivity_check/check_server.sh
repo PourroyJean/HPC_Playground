@@ -1,28 +1,19 @@
 #!/usr/bin/env bash
 
-# Load required configuration variables from an external file
-source ./config.sh
-
 # Read the list of hosts from a file, filtering out empty lines
-mapfile -t HOSTS < hosts.txt
-TMP=()
-for h in "${HOSTS[@]}"; do
-    [[ -n "$h" ]] && TMP+=("$h")
-done
-HOSTS=("${TMP[@]}")
+read_hosts() {
+    # Read only the IP addresses (first column) from hosts.csv
+    HOSTS=()
+    while IFS=, read -r ip owner || [[ -n "$ip" ]]; do
+        HOSTS+=("$ip")
+    done < "./hosts.csv"
 
-# Initialize arrays for tracking host states
-FAILED_HOSTS=()
-PREV_FAILED_HOSTS=()
-TEMP_FAILED_HOSTS=()
+    if [[ "$DEBUG" == "true" ]]; then
+        echo "Hosts: ${HOSTS[@]}" >> "$APP_LOGFILE"
+fi
 
-# Create log directory if it doesn't exist and redirect stdout/stderr to the application log
-mkdir -p "$(dirname "$APP_LOGFILE")"
-exec 1>> "$APP_LOGFILE"
-exec 2>> "$APP_LOGFILE"
+}
 
-# Track if this is the first run of the monitoring loop
-FIRST_RUN=true
 
 # Logs the result of a host check to the test log file
 # Parameters:
@@ -102,28 +93,51 @@ check_host() {
             log_result "$timestamp" "$host" "accessible" "$attempt"
             return 0
         else
-            # Log details of the verbose failed attempt
-            {
-            echo "=== Detailed connection attempt for $host ==="
-            echo "Timestamp: $timestamp"
-            echo "Command: ncat -v --proxy $PROXY --proxy-type http $host $PORT -w$((TIMEOUT*2))"
-            echo "Attempt number: $attempt"
-            echo "Output:"
-            echo "$output"
-            echo "==================================="
-            } >> "$APP_LOGFILE"
-            log_result "$timestamp" "$host" "inaccessible" "$attempt"
+            #log only if host is newly failed (not part of FAILED_HOSTS_PREV)
+            if [[ ! " ${FAILED_HOSTS_PREV[@]} " =~ " ${host}:" ]]; then
+                {
+                    echo "=== Detailed connection attempt for $host ==="
+                    echo "Timestamp: $timestamp"
+                    echo "Command: ncat -v --proxy $PROXY --proxy-type http $host $PORT -w$((TIMEOUT*2))"
+                    echo "Attempt number: $attempt"
+                    echo "Output:"
+                    echo "$output"
+                    echo "==================================="
+                } >> "$APP_LOGFILE"
+                log_result "$timestamp" "$host" "inaccessible" "$attempt"
+            fi
             return 1
         fi
-
-
     fi
 }
+
+# ------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------
+# Load required configuration variables from an external file
+source ./config.sh
+# Create log directory if it doesn't exist and redirect stdout/stderr to the application log
+mkdir -p "$(dirname "$APP_LOGFILE")"
+exec 1>> "$APP_LOGFILE"
+exec 2>> "$APP_LOGFILE"
+
+
+
+# Initialize arrays for tracking host states
+FAILED_HOSTS=()      #failed hosts this cycle    
+FAILED_HOSTS_PREV=() #failed hosts from previous cycle
+TEMP_FAILED_HOSTS=() #failed hosts this cycle that will be retried
+FIRST_RUN=true #true for the first run, false for the following runs
+
+# Read the hosts from hosts.csv
+read_hosts
+
+echo "Number of hosts: ${#HOSTS[@]}" >> "$APP_LOGFILE"
 
 
 # Main monitoring loop: continuously checks hosts and logs results
 while true; do
-    source ./config.sh  # Reload configuration
+    source ./config.sh      # Reload configuration
     SUCCESS_HOSTS=()        # Will contain all currently successful hosts
     FAILED_HOSTS=()         # Will contain all currently failed hosts
     NEWLY_FAILED_HOSTS=()   # Will contain hosts that newly failed this iteration
@@ -133,7 +147,7 @@ while true; do
     for HOST in "${HOSTS[@]}"; do
         host_failed=true
         for attempt in $(seq 1 "$MAX_ATTEMPT"); do
-            sleep "$HOST_DELAY"
+        sleep "$HOST_DELAY"
             TEST_TIME=$(date -Iseconds)
             if check_host "$HOST" "$TEST_TIME" "false" "$attempt"; then
                 SUCCESS_HOSTS+=("$HOST")
@@ -149,7 +163,7 @@ while true; do
     if [[ ${#TEMP_FAILED_HOSTS[@]} -gt 0 ]]; then
         [[ "$DEBUG" == "true" ]] && echo "Retrying failed hosts: ${TEMP_FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
         for HOST in "${TEMP_FAILED_HOSTS[@]}"; do
-            sleep "$HOST_DELAY"  # Add sleep between different hosts
+        sleep "$HOST_DELAY"  # Add sleep between different hosts
             TEST_TIME=$(date -Iseconds)
             if check_host "$HOST" "$TEST_TIME" "true" "$((MAX_ATTEMPT + 1))"; then
                 SUCCESS_HOSTS+=("$HOST")
@@ -157,7 +171,7 @@ while true; do
             else
                 FAILED_HOSTS+=("${HOST}:${TEST_TIME}")
                 if [[ "$FIRST_RUN" != "true" ]]; then
-                    if [[ ! " ${PREV_FAILED_HOSTS[@]} " =~ " ${HOST}:" ]]; then
+                    if [[ ! " ${FAILED_HOSTS_PREV[@]} " =~ " ${HOST}:" ]]; then
                         # Host is newly failed this iteration
                         NEWLY_FAILED_HOSTS+=("${HOST}:${TEST_TIME}")
                         echo "$TEST_TIME,$HOST" >> "$FAILED_HOSTS_LOG"
@@ -184,22 +198,24 @@ while true; do
 
     # Update previous failures and proceed to the next cycle
     FIRST_RUN=false
-    PREV_FAILED_HOSTS=("${FAILED_HOSTS[@]}")
+    FAILED_HOSTS_PREV=("${FAILED_HOSTS[@]}")
     echo "Check cycle completed at $(date)" >> "$APP_LOGFILE"
     sleep "$INTERVAL"
 
         # Log results only if DEBUG is true
     if [[ "$DEBUG" == "true" ]]; then
-        echo "Successful hosts: ${SUCCESS_HOSTS[*]}" >> "$APP_LOGFILE"
-        echo "Failed hosts: ${FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
-        echo "Newly failed hosts: ${NEWLY_FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
-        echo "Total number of hosts: ${#HOSTS[@]}" >> "$APP_LOGFILE"
-        echo "Number of successful hosts: ${#SUCCESS_HOSTS[@]}" >> "$APP_LOGFILE"
-        echo "Number of failed hosts: ${#FAILED_HOSTS[@]}" >> "$APP_LOGFILE"
-        echo "Number of newly failed hosts: ${#NEWLY_FAILED_HOSTS[@]}" >> "$APP_LOGFILE"
+        echo "---------------- END OF CYCLE ------------------------" >> "$APP_LOGFILE"
+        echo "  # Successful hosts: ${SUCCESS_HOSTS[*]}" >> "$APP_LOGFILE"
+        echo "  # Failed hosts: ${FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
+        echo "  # Newly failed hosts: ${NEWLY_FAILED_HOSTS[*]}" >> "$APP_LOGFILE"
+        echo "  # Total number of hosts: ${#HOSTS[@]}" >> "$APP_LOGFILE"
+        echo "  # Number of successful hosts: ${#SUCCESS_HOSTS[@]}" >> "$APP_LOGFILE"
+        echo "  # Number of failed hosts: ${#FAILED_HOSTS[@]}" >> "$APP_LOGFILE"
+        echo "  # Number of newly failed hosts: ${#NEWLY_FAILED_HOSTS[@]}" >> "$APP_LOGFILE"
+        echo "--------------------------------------------------------" >> "$APP_LOGFILE"
         total_processed=$((${#SUCCESS_HOSTS[@]} + ${#FAILED_HOSTS[@]}))
         if [[ $total_processed -ne ${#HOSTS[@]} ]]; then
-            echo "WARNING: Not all hosts were processed! Expected ${#HOSTS[@]}, got $total_processed" >> "$APP_LOGFILE"
+            echo " /!\\ WARNING: Not all hosts were processed! Expected ${#HOSTS[@]}, got $total_processed" >> "$APP_LOGFILE"
         fi
     fi
 done
