@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Union
 
 @dataclass
 class LogicalCPU:
@@ -82,6 +82,7 @@ class MPITask:
     node: Node                      # The node this MPI task is running on
     logical_cpus: List[LogicalCPU]  # Logical CPUs assigned to this MPI task
     openmp_threads: List[OpenMPThread] = field(default_factory=list)
+    selected_nics: List[NIC] = field(default_factory=list)  # NICs selected by this MPI task
 
 @dataclass
 class Job:
@@ -264,32 +265,8 @@ def print_run(cluster, job, show_detailed_cpu=False, indent="", last=True):
                         cpu_ids.append(cpu.id)
                 
                 if cpu_ids:
-                    # Sort CPU IDs
-                    cpu_ids.sort()
-                    
-                    # Create ranges for display (e.g., [0-15, 64-79])
-                    ranges = []
-                    start = cpu_ids[0]
-                    end = cpu_ids[0]
-                    
-                    for i in range(1, len(cpu_ids)):
-                        if cpu_ids[i] == end + 1:
-                            end = cpu_ids[i]
-                        else:
-                            if start == end:
-                                ranges.append(str(start))
-                            else:
-                                ranges.append(f"{start}-{end}")
-                            start = cpu_ids[i]
-                            end = cpu_ids[i]
-                    
-                    # Add the last range
-                    if start == end:
-                        ranges.append(str(start))
-                    else:
-                        ranges.append(f"{start}-{end}")
-                    
-                    range_str = ", ".join(ranges)
+                    # Use the unified format_id_ranges_as_list function
+                    range_str = format_id_ranges(cpu_ids)
                     print(f"{cpu_indent}├── CPUs: {range_str}")
             
             # Print NICs in this NUMA domain
@@ -332,30 +309,9 @@ def print_run(cluster, job, show_detailed_cpu=False, indent="", last=True):
             # Get CPU IDs used by this task
             cpu_ids = sorted([cpu.id for cpu in task.logical_cpus])
             
-            # Format CPU IDs as ranges
-            ranges = []
-            if cpu_ids:
-                start = cpu_ids[0]
-                end = cpu_ids[0]
-                
-                for i in range(1, len(cpu_ids)):
-                    if cpu_ids[i] == end + 1:
-                        end = cpu_ids[i]
-                    else:
-                        if start == end:
-                            ranges.append(str(start))
-                        else:
-                            ranges.append(f"{start}-{end}")
-                        start = cpu_ids[i]
-                        end = cpu_ids[i]
-                
-                # Add the last range
-                if start == end:
-                    ranges.append(str(start))
-                else:
-                    ranges.append(f"{start}-{end}")
+            # Use the unified format_id_ranges function
+            cpu_str = format_id_ranges(cpu_ids)
             
-            cpu_str = ", ".join(ranges)
             print(f"{task_indent}{task_prefix}MPI Rank {task.id} ({len(task.logical_cpus)} CPUs: {cpu_str})")
             
             # Increase indent for threads
@@ -368,14 +324,47 @@ def print_run(cluster, job, show_detailed_cpu=False, indent="", last=True):
                 
                 # Print each thread
                 for k, thread in enumerate(sorted(task.openmp_threads, key=lambda t: t.id)):
-                    is_last_thread = k == thread_count - 1
+                    is_last_thread = k == thread_count - 1 and not task.selected_nics  # Not last if we have NICs to show
                     thread_prefix = "└── " if is_last_thread else "├── "
                     
                     # Get CPU IDs used by this thread
                     thread_cpu_ids = sorted([cpu.id for cpu in thread.logical_cpus])
                     thread_cpu_str = ", ".join(map(str, thread_cpu_ids))
                     
-                    print(f"{thread_indent}{thread_prefix}Thread {thread.id}: {thread_cpu_str}")
+                    # Increase indentation for threads to make them appear as sub-items
+                    # Use proper vertical alignment with connecting lines
+                    if is_last_thread:
+                        deep_thread_indent = thread_indent + "        "  # No vertical line for last item
+                    else:
+                        deep_thread_indent = thread_indent + "│       "  # Keep vertical line for non-last items
+                    
+                    print(f"{deep_thread_indent}{thread_prefix}Thread {thread.id}: {thread_cpu_str}")
+                
+                # Print selected NICs for this MPI task
+                if task.selected_nics:
+                    # If we didn't have any threads, we need a different prefix
+                    nic_line_prefix = "└── "  # Always the last item in the branch
+                    
+                    # Print the count of selected NICs
+                    nic_count = len(task.selected_nics)
+                    if nic_count > 0:
+                        # Always use "└── " as it's the last item in task display
+                        print(f"{thread_indent}{nic_line_prefix}{nic_count} Selected NICs")
+                        
+                        # Print each NIC with its details
+                        for l, nic in enumerate(sorted(task.selected_nics, key=lambda n: n.id)):
+                            is_last_nic = l == nic_count - 1
+                            nic_prefix = "└── " if is_last_nic else "├── "
+                            numa_id = nic.numa_domain.id
+                            
+                            # Use the same indentation as threads, but without the vertical line for the last item
+                            # since there's nothing after it
+                            if is_last_nic:
+                                deep_nic_indent = thread_indent + "        "  # No vertical line for last item
+                            else:
+                                deep_nic_indent = thread_indent + "│       "  # Keep vertical line for non-last items
+                            
+                            print(f"{deep_nic_indent}{nic_prefix}{nic.id} (NUMA {numa_id})")
     
     # Print job summary at the end
     print(f"\n{job.get_summary()}")
@@ -384,6 +373,12 @@ def format_id_ranges(ids):
     """
     Formats a list of identifiers into compact ranges.
     Example: [1, 2, 3, 5, 6, 9] -> "1-3, 5-6, 9"
+    
+    Args:
+        ids: List of integer IDs to format
+        
+    Returns:
+        A string with formatted ranges or a list of range strings if as_list=True
     """
     if not ids:
         return ""
@@ -412,4 +407,43 @@ def format_id_ranges(ids):
         ranges.append(f"{start}-{end}")
     
     return ", ".join(ranges)
+
+def format_id_ranges_as_list(ids):
+    """
+    Similar to format_id_ranges but returns a list of range strings
+    instead of joining them.
+    
+    Args:
+        ids: List of integer IDs to format
+        
+    Returns:
+        A list of strings, each representing a range
+    """
+    if not ids:
+        return []
+    
+    # Sort the IDs
+    sorted_ids = sorted(ids)
+    
+    ranges = []
+    start = sorted_ids[0]
+    end = start
+    
+    for i in range(1, len(sorted_ids)):
+        if sorted_ids[i] == end + 1:
+            end = sorted_ids[i]
+        else:
+            if start == end:
+                ranges.append(str(start))
+            else:
+                ranges.append(f"{start}-{end}")
+            start = end = sorted_ids[i]
+    
+    # Process the last range
+    if start == end:
+        ranges.append(str(start))
+    else:
+        ranges.append(f"{start}-{end}")
+    
+    return ranges
 
