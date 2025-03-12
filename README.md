@@ -6,8 +6,12 @@ This Fortran program benchmarks GPU unified memory performance (such as MI300A) 
 ## 2. [Check_Binding](./Check_Binding)
 Provides a simple check_binding.sh script demonstrating how to control CPU affinity, thread placement, and MPI distribution on Slurm-managed HPC clusters
 
-## 3. [Connectivity check](.Connectivity_check)
+## 3. [Connectivity check](./Connectivity_check)
 Checker that regularly tests the accessibility of multiple hosts over SSH via a specified proxy. If any hosts become unreachable, the script will send email alerts and log the results.
+
+## 4. [Cray Bind Analyzer](./CrayBindAnalyzer)
+Checker that regularly tests the accessibility of multiple hosts over SSH via a specified proxy. If any hosts become unreachable, the script will send email alerts and log the results.
+
 
 
 ---------
