@@ -1,0 +1,286 @@
+----------------------------------------
+0,1,2,3,4,5,6,7
+
+
+0,1,2,3,4,5,6,7
+----------------------------------------
+[PE_0]: MPI rank order: Using default aprun rank ordering.
+[PE_0]: rank 0 is on nid005186
+[PE_0]: rank 1 is on nid005186
+[PE_0]: rank 2 is on nid005187
+[PE_0]: rank 3 is on nid005187
+[PE_2]: cpumask set to 4 cpus on nid005187, cpumask = 00000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000110
+[PE_0]: cpumask set to 4 cpus on nid005186, cpumask = 00000000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000000000000000000000000000000110
+[PE_3]: cpumask set to 4 cpus on nid005187, cpumask = 00000000000000000000000000000000000000000000000000000110000000000000000000000000000000000000000000000000000000000000011000000000
+[PE_1]: cpumask set to 4 cpus on nid005186, cpumask = 00000000000000000000000000000000000000000000000000000110000000000000000000000000000000000000000000000000000000000000011000000000
+PE 0: MPICH processor detected:
+PE 0:   AMD Trento (25:48:1) (family:model:stepping)
+PE 0: MPICH environment settings =====================================
+PE 0:   MPICH_ENV_DISPLAY                              = 1
+PE 0:   MPICH_VERSION_DISPLAY                          = 0
+PE 0:   MPICH_ABORT_ON_ERROR                           = 0
+PE 0:   MPICH_CPUMASK_DISPLAY                          = 1
+PE 0:   MPICH_STATS_DISPLAY                            = 0
+PE 0:   MPICH_RANK_REORDER_METHOD                      = 1
+PE 0:   MPICH_RANK_REORDER_DISPLAY                     = 1
+PE 0:   MPICH_MEMCPY_MEM_CHECK                         = 0
+PE 0:   MPICH_USE_SYSTEM_MEMCPY                        = 1
+PE 0:   MPICH_OPTIMIZED_MEMCPY                         = 0
+PE 0:   MPICH_ALLOC_MEM_PG_SZ                          = 4096
+PE 0:   MPICH_ALLOC_MEM_POLICY                         = PREFERRED
+PE 0:   MPICH_ALLOC_MEM_AFFINITY                       = SYS_DEFAULT
+PE 0:   MPICH_MALLOC_FALLBACK                          = 0
+PE 0:   MPICH_MEM_DEBUG_FNAME                          = 
+PE 0:   MPICH_INTERNAL_MEM_AFFINITY                    = SYS_DEFAULT
+PE 0:   MPICH_NO_BUFFER_ALIAS_CHECK                    = 0
+PE 0:   MPICH_COLL_SYNC                                = 0
+PE 0:   MPICH_SINGLE_HOST_ENABLED                        = 1
+PE 0:   MPICH_USE_PERSISTENT_TOPS                      = 0
+PE 0:   MPICH_DISABLE_PERSISTENT_RECV_TOPS             = 0
+PE 0:   MPICH_MAX_TOPS_COUNTERS                        = 0
+PE 0:   MPICH_ENABLE_ACTIVE_WAIT                       = 0
+PE 0: MPICH/RMA environment settings =================================
+PE 0:   MPICH_RMA_MAX_PENDING                          = 128
+PE 0:   MPICH_RMA_SHM_ACCUMULATE                       = 0
+PE 0: MPICH/Dynamic Process Management environment settings ==========
+PE 0:   MPICH_DPM_DIR                                  = 
+PE 0:   MPICH_LOCAL_SPAWN_SERVER                       = 0
+PE 0:   MPICH_SPAWN_USE_RANKPOOL                       = 0
+PE 0: MPICH/SMP environment settings =================================
+PE 0:   MPICH_SMP_SINGLE_COPY_MODE                     = XPMEM
+PE 0:   MPICH_SMP_SINGLE_COPY_SIZE                     = 8192
+PE 0:   MPICH_SHM_PROGRESS_MAX_BATCH_SIZE              = 8
+PE 0: Launcher/PMI did not supply NIC data (node_idx=0, rc=0, num_pmi_nics=0)
+PE 1: Host nid005186 selected NIC index=1, domain_name=cxi1, numa_node=1, address=[0x7342]
+PE 0: MPICH_OFI_NIC_POLICY = BLOCK
+PE 0: ======================== Display NIC Addrs  ========================
+PE 0: Hostname: nid005186
+PE 0:   MPICH_OFI_NIC_POLICY: BLOCK
+PE 0:   Number of NICs: 4
+PE 0:     nic_index 0: domain_name=cxi0, numa_domain=3, addr=0x7343
+PE 0:     nic_index 1: domain_name=cxi1, numa_domain=1, addr=0x7342
+PE 0:     nic_index 2: domain_name=cxi2, numa_domain=0, addr=0x7302
+PE 0:     nic_index 3: domain_name=cxi3, numa_domain=2, addr=0x7303
+PE 0:   Number of NUMA domains: 4
+PE 0:     numa_domain 0: cpu_list=[0-15,64-79]
+PE 0:     numa_domain 1: cpu_list=[16-31,80-95]
+PE 0:     numa_domain 2: cpu_list=[32-47,96-111]
+PE 0:     numa_domain 3: cpu_list=[48-63,112-127]
+PE 0: ====================================================================
+PE 0: Host nid005186 selected NIC index=0, domain_name=cxi0, numa_node=3, address=[0x7343]
+PE 0: MPICH/OFI environment settings =================================
+PE 0:   MPICH_OFI_USE_PROVIDER                         = cxi
+PE 0:   MPICH_OFI_VERBOSE                              = 0
+PE 0:   MPICH_OFI_NIC_VERBOSE                          = 2
+PE 0:   FI_CXI_RDZV_THRESHOLD                          = 16384
+PE 0:   FI_CXI_RDZV_EAGER_SIZE                         = 2048
+PE 0:   FI_CXI_DEFAULT_CQ_SIZE                         = 131072
+PE 0:   FI_CXI_DEFAULT_TX_SIZE                         = 1024
+PE 0:   FI_CXI_OFLOW_BUF_SIZE                          = 12582912
+PE 0:   FI_CXI_OFLOW_BUF_COUNT                         = 3
+PE 0:   FI_CXI_RX_MATCH_MODE                           = hardware
+PE 0:   FI_CXI_REQ_BUF_MIN_POSTED                      = 6
+PE 0:   FI_CXI_REQ_BUF_SIZE                            = 12582912
+PE 0:   FI_CXI_REQ_BUF_MAX_CACHED                      = 0
+PE 0:   FI_MR_CACHE_MAX_SIZE                           = -1
+PE 0:   FI_MR_CACHE_MAX_COUNT                          = 524288
+PE 0:   MPICH_OFI_DEFAULT_TCLASS                       = TC_BEST_EFFORT
+PE 0:   MPICH_OFI_TCLASS_ERRORS                        = warn
+PE 0:   MPICH_OFI_CXI_PID_BASE                         = 0
+PE 0:   MPICH_OFI_USE_SCALABLE_STARTUP                 = 1
+PE 0:   MPICH_OFI_CXI_COUNTER_REPORT                   = 1
+PE 0:   MPICH_OFI_CXI_COUNTER_VERBOSE                  = 0
+PE 0:   MPICH_OFI_CXI_COUNTER_FILE                     = NULL
+PE 0:   MPICH_OFI_CXI_COUNTER_REPORT_FILE              = NULL
+PE 0:   MPICH_OFI_NIC_POLICY                           = BLOCK
+PE 0:   MPICH_OFI_NIC_MAPPING                          = NULL
+PE 0:   MPICH_OFI_NUM_NICS                             = NULL
+PE 0:   MPICH_CH4_OFI_ENABLE_CONTROL_AUTO_PROGRESS     = -1
+PE 0:   MPICH_CH4_OFI_ENABLE_DATA_AUTO_PROGRESS        = -1
+PE 0:   MPICH_OFI_RMA_STARTUP_CONNECT                  = 0
+PE 0:   MPICH_OFI_SKIP_NIC_SYMMETRY_TEST               = 0
+PE 0:   MPICH_OFI_STARTUP_CONNECT                      = 0
+PE 3: Host nid005187 selected NIC index=1, domain_name=cxi1, numa_node=1, address=[0x73c2]
+PE 2: Host nid005187 selected NIC index=0, domain_name=cxi0, numa_node=3, address=[0x73c3]
+PE 0: MPICH/COLLECTIVE environment settings ==========================
+PE 0:   MPICH_COLL_OPT_OFF                             = 0
+PE 0:   MPICH_BCAST_ONLY_TREE                          = 1
+PE 0:   MPICH_BCAST_INTERNODE_RADIX                    = 4
+PE 0:   MPICH_BCAST_INTRANODE_RADIX                    = 4
+PE 0:   MPICH_ALLTOALL_SHORT_MSG                       = 64-512
+PE 0:   MPICH_ALLTOALL_SYNC_FREQ                       = 1-24
+PE 0:   MPICH_ALLTOALL_BLK_SIZE                        = 16384
+PE 0:   MPICH_ALLTOALL_CHUNKING_MAX_NODES              = 90
+PE 0:   MPICH_ALLTOALLV_THROTTLE                       = 8
+PE 0:   MPICH_ALLGATHER_VSHORT_MSG                     = 8192-16384
+PE 0:   MPICH_ALLGATHERV_VSHORT_MSG                    = 8192-16384
+PE 0:   MPICH_GATHERV_SHORT_MSG                        = 131072
+PE 0:   MPICH_GATHERV_MIN_COMM_SIZE                    = 64
+PE 0:   MPICH_GATHERV_MAX_TMP_SIZE                     = 536870912
+PE 0:   MPICH_GATHERV_SYNC_FREQ                        = 16
+PE 0:   MPICH_IGATHERV_MIN_COMM_SIZE                   = 1000
+PE 0:   MPICH_IGATHERV_SYNC_FREQ                       = 100
+PE 0:   MPICH_IGATHERV_RAND_COMMSIZE                   = 2048
+PE 0:   MPICH_IGATHERV_RAND_RECVLIST                   = 0
+PE 0:   MPICH_SCATTERV_SHORT_MSG                       = 2048-8192
+PE 0:   MPICH_SCATTERV_MIN_COMM_SIZE                   = 64
+PE 0:   MPICH_SCATTERV_MAX_TMP_SIZE                    = 536870912
+PE 0:   MPICH_SCATTERV_SYNC_FREQ                       = 16
+PE 0:   MPICH_SCATTERV_SYNCHRONOUS                     = 0
+PE 0:   MPICH_ALLREDUCE_MAX_SMP_SIZE                   = 262144
+PE 0:   MPICH_ALLREDUCE_BLK_SIZE                       = 716800
+PE 0:   MPICH_GPU_ALLGATHER_VSHORT_MSG_ALGORITHM       = 1
+PE 0:   MPICH_GPU_ALLREDUCE_USE_KERNEL                 = 0
+PE 0:   MPICH_GPU_COLL_STAGING_BUF_SIZE                = 1048576
+PE 0:   MPICH_GPU_ALLREDUCE_STAGING_THRESHOLD          = 256
+PE 0:   MPICH_ALLREDUCE_NO_SMP                         = 0
+PE 0:   MPICH_REDUCE_NO_SMP                            = 0
+PE 0:   MPICH_REDUCE_SCATTER_COMMUTATIVE_LONG_MSG_SIZE = 524288
+PE 0:   MPICH_REDUCE_SCATTER_MAX_COMMSIZE              = 1000
+PE 0:   MPICH_SHARED_MEM_COLL_OPT                      = 1
+PE 0:   MPICH_SHARED_MEM_COLL_NCELLS                   = 8
+PE 0:   MPICH_SHARED_MEM_COLL_CELLSZ                   = 256
+
+OPENMP DISPLAY ENVIRONMENT BEGIN
+  _OPENMP='201511'
+  OMP_NESTED='FALSE'
+  OMP_SCHEDULE='static'
+  OMP_NUM_THREADS='2'
+  OMP_DYNAMIC='TRUE'
+  OMP_STACKSIZE='128M'
+  OMP_WAIT_POLICY='PASSIVE'
+  OMP_MAX_ACTIVE_LEVELS='1'
+  OMP_THREAD_LIMIT='512'
+  OMP_PROC_BIND='spread'
+  OMP_PLACES='cores'
+  OMP_DISPLAY_AFFINITY='TRUE'
+  OMP_AFFINITY_FORMAT='CCE OMP: host %H pid %P tid %i thread %n affinity: %A'
+  OMP_CANCELLATION='FALSE'
+  OMP_MAX_TASK_PRIORITY='0'
+  OMP_NUM_TEAMS='1'
+  OMP_DISPLAY_ENV='TRUE'
+  OMP_DEFAULT_DEVICE='0'
+  OMP_TOOL_LIBRARIES=''
+  OMP_TOOL='ENABLED'
+  OMP_DEBUG='DISABLED'
+  OMP_TARGET_OFFLOAD='DEFAULT'
+  OMP_ALLOCATOR='omp_default_mem_alloc'
+OPENMP DISPLAY ENVIRONMENT END
+CCE OMP: host nid005187 pid 43442 tid 43442 thread 0 affinity:  1 65
+Hello world from rank 2 (out of 4 MPI processes), thread 0 (out of 2 OpenMP threads)!
+CCE OMP: host nid005187 pid 43442 tid 43454 thread 1 affinity:  2 66
+Hello world from rank 2 (out of 4 MPI processes), thread 1 (out of 2 OpenMP threads)!
+
+OPENMP DISPLAY ENVIRONMENT BEGIN
+  _OPENMP='201511'
+  OMP_NESTED='FALSE'
+  OMP_SCHEDULE='static'
+  OMP_NUM_THREADS='2'
+  OMP_DYNAMIC='TRUE'
+  OMP_STACKSIZE='128M'
+  OMP_WAIT_POLICY='PASSIVE'
+  OMP_MAX_ACTIVE_LEVELS='1'
+  OMP_THREAD_LIMIT='512'
+  OMP_PROC_BIND='spread'
+  OMP_PLACES='cores'
+  OMP_DISPLAY_AFFINITY='TRUE'
+  OMP_AFFINITY_FORMAT='CCE OMP: host %H pid %P tid %i thread %n affinity: %A'
+  OMP_CANCELLATION='FALSE'
+  OMP_MAX_TASK_PRIORITY='0'
+  OMP_NUM_TEAMS='1'
+  OMP_DISPLAY_ENV='TRUE'
+  OMP_DEFAULT_DEVICE='0'
+  OMP_TOOL_LIBRARIES=''
+  OMP_TOOL='ENABLED'
+  OMP_DEBUG='DISABLED'
+  OMP_TARGET_OFFLOAD='DEFAULT'
+  OMP_ALLOCATOR='omp_default_mem_alloc'
+OPENMP DISPLAY ENVIRONMENT END
+CCE OMP: host nid005187 pid 43443 tid 43443 thread 0 affinity:  9 73
+Hello world from rank 3 (out of 4 MPI processes), thread 0 (out of 2 OpenMP threads)!
+CCE OMP: host nid005187 pid 43443 tid 43455 thread 1 affinity:  10 74
+Hello world from rank 3 (out of 4 MPI processes), thread 1 (out of 2 OpenMP threads)!
+PE 0: MPICH MPIIO environment settings ===============================
+PE 0:   MPICH_MPIIO_HINTS_DISPLAY                      = 0
+PE 0:   MPICH_MPIIO_HINTS                              = NULL
+PE 0:   MPICH_MPIIO_ABORT_ON_RW_ERROR                  = disable
+PE 0:   MPICH_MPIIO_CB_ALIGN                           = 2
+PE 0:   MPICH_MPIIO_DVS_MAXNODES                       = -1
+PE 0:   MPICH_MPIIO_AGGREGATOR_PLACEMENT_DISPLAY       = 0
+PE 0:   MPICH_MPIIO_AGGREGATOR_PLACEMENT_STRIDE        = -1
+PE 0:   MPICH_MPIIO_MAX_NUM_IRECV                      = 50
+PE 0:   MPICH_MPIIO_MAX_NUM_ISEND                      = 50
+PE 0:   MPICH_MPIIO_MAX_SIZE_ISEND                     = 10485760
+PE 0:   MPICH_MPIIO_OFI_STARTUP_CONNECT                = disable
+PE 0:   MPICH_MPIIO_OFI_STARTUP_NODES_AGGREGATOR        = 2
+PE 0: MPICH MPIIO statistics environment settings ====================
+PE 0:   MPICH_MPIIO_STATS                              = 0
+PE 0:   MPICH_MPIIO_TIMERS                             = 0
+PE 0:   MPICH_MPIIO_WRITE_EXIT_BARRIER                 = 1
+PE 0: MPICH Thread Safety settings ===================================
+PE 0:   MPICH_ASYNC_PROGRESS                           = 0
+PE 0:   MPICH_OPT_THREAD_SYNC                          = 1
+PE 0:   rank 0 required = single, was provided = single
+
+OPENMP DISPLAY ENVIRONMENT BEGIN
+  _OPENMP='201511'
+  OMP_NESTED='FALSE'
+  OMP_SCHEDULE='static'
+  OMP_NUM_THREADS='2'
+  OMP_DYNAMIC='TRUE'
+  OMP_STACKSIZE='128M'
+  OMP_WAIT_POLICY='PASSIVE'
+  OMP_MAX_ACTIVE_LEVELS='1'
+  OMP_THREAD_LIMIT='512'
+  OMP_PROC_BIND='spread'
+  OMP_PLACES='cores'
+  OMP_DISPLAY_AFFINITY='TRUE'
+  OMP_AFFINITY_FORMAT='CCE OMP: host %H pid %P tid %i thread %n affinity: %A'
+  OMP_CANCELLATION='FALSE'
+  OMP_MAX_TASK_PRIORITY='0'
+  OMP_NUM_TEAMS='1'
+  OMP_DISPLAY_ENV='TRUE'
+  OMP_DEFAULT_DEVICE='0'
+  OMP_TOOL_LIBRARIES=''
+  OMP_TOOL='ENABLED'
+  OMP_DEBUG='DISABLED'
+  OMP_TARGET_OFFLOAD='DEFAULT'
+  OMP_ALLOCATOR='omp_default_mem_alloc'
+OPENMP DISPLAY ENVIRONMENT END
+CCE OMP: host nid005186 pid 113850 tid 113850 thread 0 affinity:  1 65
+Hello world from rank 0 (out of 4 MPI processes), thread 0 (out of 2 OpenMP threads)!
+CCE OMP: host nid005186 pid 113850 tid 113910 thread 1 affinity:  2 66
+Hello world from rank 0 (out of 4 MPI processes), thread 1 (out of 2 OpenMP threads)!
+
+MPICH Slingshot Network Summary: 0 network timeouts
+
+
+OPENMP DISPLAY ENVIRONMENT BEGIN
+  _OPENMP='201511'
+  OMP_NESTED='FALSE'
+  OMP_SCHEDULE='static'
+  OMP_NUM_THREADS='2'
+  OMP_DYNAMIC='TRUE'
+  OMP_STACKSIZE='128M'
+  OMP_WAIT_POLICY='PASSIVE'
+  OMP_MAX_ACTIVE_LEVELS='1'
+  OMP_THREAD_LIMIT='512'
+  OMP_PROC_BIND='spread'
+  OMP_PLACES='cores'
+  OMP_DISPLAY_AFFINITY='TRUE'
+  OMP_AFFINITY_FORMAT='CCE OMP: host %H pid %P tid %i thread %n affinity: %A'
+  OMP_CANCELLATION='FALSE'
+  OMP_MAX_TASK_PRIORITY='0'
+  OMP_NUM_TEAMS='1'
+  OMP_DISPLAY_ENV='TRUE'
+  OMP_DEFAULT_DEVICE='0'
+  OMP_TOOL_LIBRARIES=''
+  OMP_TOOL='ENABLED'
+  OMP_DEBUG='DISABLED'
+  OMP_TARGET_OFFLOAD='DEFAULT'
+  OMP_ALLOCATOR='omp_default_mem_alloc'
+OPENMP DISPLAY ENVIRONMENT END
+CCE OMP: host nid005186 pid 113851 tid 113851 thread 0 affinity:  9 73
+Hello world from rank 1 (out of 4 MPI processes), thread 0 (out of 2 OpenMP threads)!
+CCE OMP: host nid005186 pid 113851 tid 113911 thread 1 affinity:  10 74
+Hello world from rank 1 (out of 4 MPI processes), thread 1 (out of 2 OpenMP threads)!
