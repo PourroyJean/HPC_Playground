@@ -10,7 +10,7 @@ Provides a simple check_binding.sh script demonstrating how to control CPU affin
 Checker that regularly tests the accessibility of multiple hosts over SSH via a specified proxy. If any hosts become unreachable, the script will send email alerts and log the results.
 
 ## 4. [Cray Bind Analyzer](./CrayBindAnalyzer)
-Checker that regularly tests the accessibility of multiple hosts over SSH via a specified proxy. If any hosts become unreachable, the script will send email alerts and log the results.
+A Python tool for parsing and visualizing high-performance computing (HPC) cluster topologies and job allocation information from MPICH output files.
 
 
 
