@@ -1,0 +1,150 @@
+Created cluster with 2 nodes:
+  Node: nid005187
+  Node: nid005186
+
+Added NUMA domains to nodes:
+  Node nid005187 has 4 NUMA domains
+    NUMA 0: 16 physical cores
+      CPU list: [0-15,64-79]
+    NUMA 1: 16 physical cores
+      CPU list: [16-31,80-95]
+    NUMA 2: 16 physical cores
+      CPU list: [32-47,96-111]
+    NUMA 3: 16 physical cores
+      CPU list: [48-63,112-127]
+  Node nid005186 has 4 NUMA domains
+    NUMA 0: 16 physical cores
+      CPU list: [0-15,64-79]
+    NUMA 1: 16 physical cores
+      CPU list: [16-31,80-95]
+    NUMA 2: 16 physical cores
+      CPU list: [32-47,96-111]
+    NUMA 3: 16 physical cores
+      CPU list: [48-63,112-127]
+
+Adding NICs to cluster:
+  NIC cxi0 (index 0) -> NUMA domain 3
+  NIC cxi1 (index 1) -> NUMA domain 1
+  NIC cxi2 (index 2) -> NUMA domain 0
+  NIC cxi3 (index 3) -> NUMA domain 2
+
+NIC Summary:
+  Node nid005187:
+    NUMA 0: NICs = cxi2
+    NUMA 1: NICs = cxi1
+    NUMA 2: NICs = cxi3
+    NUMA 3: NICs = cxi0
+  Node nid005186:
+    NUMA 0: NICs = cxi2
+    NUMA 1: NICs = cxi1
+    NUMA 2: NICs = cxi3
+    NUMA 3: NICs = cxi0
+Found 4 selected NICs:
+  PE 1 on nid005186 selected NIC cxi1 (index=1, numa=1)
+  PE 0 on nid005186 selected NIC cxi0 (index=0, numa=3)
+  PE 3 on nid005187 selected NIC cxi1 (index=1, numa=1)
+  PE 2 on nid005187 selected NIC cxi0 (index=0, numa=3)
+
+Created Job with MPI tasks and OpenMP threads:
+  Job name: job_from_example_1.input
+  Number of MPI tasks: 4
+  MPI Task 0 on nid005186: 2 OpenMP threads, CPUs: 1-2, 65-66
+    Thread 0: CPUs: 1, 65
+    Thread 1: CPUs: 2, 66
+  MPI Task 1 on nid005186: 2 OpenMP threads, CPUs: 9-10, 73-74
+    Thread 0: CPUs: 9, 73
+    Thread 1: CPUs: 10, 74
+  MPI Task 2 on nid005187: 2 OpenMP threads, CPUs: 1-2, 65-66
+    Thread 0: CPUs: 1, 65
+    Thread 1: CPUs: 2, 66
+  MPI Task 3 on nid005187: 2 OpenMP threads, CPUs: 9-10, 73-74
+    Thread 0: CPUs: 9, 73
+    Thread 1: CPUs: 10, 74
+
+=============== Cluster Topology Summary ===============
+Node: nid005187
+  NUMA Domain 0: 16 cores
+    Total logical CPUs: 32
+  NUMA Domain 1: 16 cores
+    Total logical CPUs: 32
+  NUMA Domain 2: 16 cores
+    Total logical CPUs: 32
+  NUMA Domain 3: 16 cores
+    Total logical CPUs: 32
+Node: nid005186
+  NUMA Domain 0: 16 cores
+    Total logical CPUs: 32
+  NUMA Domain 1: 16 cores
+    Total logical CPUs: 32
+  NUMA Domain 2: 16 cores
+    Total logical CPUs: 32
+  NUMA Domain 3: 16 cores
+    Total logical CPUs: 32
+
+=============== Tree View of Structure ===============
+Cluster (2 nodes)
+  ├── Node: nid005186 (4 NUMA domains - 64 cores, 128 CPUs)
+  │   ├── NUMA: 0 (16 cores, 32 CPUs)
+  │   │   ├── CPUs: 0-15, 64-79
+  │   │   └── NICs: cxi2
+  │   ├── NUMA: 1 (16 cores, 32 CPUs)
+  │   │   ├── CPUs: 16-31, 80-95
+  │   │   └── NICs: cxi1
+  │   ├── NUMA: 2 (16 cores, 32 CPUs)
+  │   │   ├── CPUs: 32-47, 96-111
+  │   │   └── NICs: cxi3
+  │   └── NUMA: 3 (16 cores, 32 CPUs)
+  │       ├── CPUs: 48-63, 112-127
+  │       └── NICs: cxi0
+  └── Node: nid005187 (4 NUMA domains - 64 cores, 128 CPUs)
+      ├── NUMA: 0 (16 cores, 32 CPUs)
+      │   ├── CPUs: 0-15, 64-79
+      │   └── NICs: cxi2
+      ├── NUMA: 1 (16 cores, 32 CPUs)
+      │   ├── CPUs: 16-31, 80-95
+      │   └── NICs: cxi1
+      ├── NUMA: 2 (16 cores, 32 CPUs)
+      │   ├── CPUs: 32-47, 96-111
+      │   └── NICs: cxi3
+      └── NUMA: 3 (16 cores, 32 CPUs)
+          ├── CPUs: 48-63, 112-127
+          └── NICs: cxi0
+
+=============== Job: job_from_example_1.input (ID: 1, 4 MPI tasks) ===============
+  ├── Node: nid005186 (4 NUMA domains - 64 cores, 128 CPUs)
+  │   ├── MPI Rank 0 (4 CPUs: 1-2, 65-66)
+  │   │   ├── 2 OpenMP threads
+  │   │   │       ├── Thread 0: 1, 65
+  │   │   │       ├── Thread 1: 2, 66
+  │   │   └── 1 Selected NICs
+  │   │           └── cxi0 (NUMA 3)
+  │   └── MPI Rank 1 (4 CPUs: 9-10, 73-74)
+  │       ├── 2 OpenMP threads
+  │       │       ├── Thread 0: 9, 73
+  │       │       ├── Thread 1: 10, 74
+  │       └── 1 Selected NICs
+  │               └── cxi1 (NUMA 1)
+  └── Node: nid005187 (4 NUMA domains - 64 cores, 128 CPUs)
+      ├── MPI Rank 2 (4 CPUs: 1-2, 65-66)
+      │   ├── 2 OpenMP threads
+      │   │       ├── Thread 0: 1, 65
+      │   │       ├── Thread 1: 2, 66
+      │   └── 1 Selected NICs
+      │           └── cxi0 (NUMA 3)
+      └── MPI Rank 3 (4 CPUs: 9-10, 73-74)
+          ├── 2 OpenMP threads
+          │       ├── Thread 0: 9, 73
+          │       ├── Thread 1: 10, 74
+          └── 1 Selected NICs
+                  └── cxi1 (NUMA 1)
+
+=============== Job Summary ===============
+Job ID               : 1
+Nodes Used           : 2
+MPI Ranks            : 4  (2 per node)
+Threads per Rank     : 2
+Total CPUs Allocated : 16  (4 CPUs per rank)
+Total CPUs Available : 256
+NUMA Domains per Node: 4
+Cores per Node       : 64
+
