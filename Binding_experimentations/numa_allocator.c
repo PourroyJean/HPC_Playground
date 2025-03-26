@@ -10,30 +10,25 @@
 #include <numa.h>
 #include <hwloc.h>
 #include <sys/mman.h>
-#include <linux/mempolicy.h>
-#include <sys/syscall.h>
 #include <errno.h>
-#include <numaif.h>  // For mbind
+#include <linux/mempolicy.h>  // For MPOL_F_NODE and MPOL_F_ADDR
+#include <numaif.h>          // For get_mempolicy
 
 // Default allocation size in MB
 #define DEFAULT_ALLOC_SIZE_MB 512
-// Default NUMA domain (-1 means use regular malloc)
-#define DEFAULT_NUMA_DOMAIN -1
 
 // Function declarations
-static int parse_args(int argc, char *argv[], int *numa_domain);
-static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa, int *alloc_numa);
+static int parse_args(int argc, char *argv[]);
+static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa);
 static int get_numa_node_of_address(void *addr);
-static void print_results_table(int rank, int cpu_id, int core_numa, int alloc_numa, void *addr, size_t size);
-static void* numa_alloc_on_node(size_t size, int node);
+static void print_results_table(int rank, int cpu_id, int core_numa, void *addr, size_t size);
 
 int main(int argc, char *argv[]) {
     int rank, size;
     size_t alloc_size_mb;
-    int numa_domain;
     void *allocated_memory;
     hwloc_topology_t topology;
-    int cpu_id, core_numa, alloc_numa;
+    int cpu_id, core_numa;
 
     // Initialize MPI
     if (MPI_Init(&argc, &argv) != MPI_SUCCESS) {
@@ -61,12 +56,13 @@ int main(int argc, char *argv[]) {
         printf("  Number of CPUs: %ld\n", sysconf(_SC_NPROCESSORS_ONLN));
         printf("  Current CPU: %d\n", sched_getcpu());
         printf("  Current NUMA node: %d\n", numa_node_of_cpu(sched_getcpu()));
+        printf("\nNote: NUMA memory binding should be controlled externally using numactl --membind=<node>\n");
         printf("=====================\n\n");
         fflush(stdout);
     }
 
     // Parse command line arguments
-    alloc_size_mb = parse_args(argc, argv, &numa_domain);
+    alloc_size_mb = parse_args(argc, argv);
 
     // Initialize hwloc topology with specific flags
     hwloc_topology_init(&topology);
@@ -74,17 +70,11 @@ int main(int argc, char *argv[]) {
     hwloc_topology_load(topology);
 
     // Get CPU and NUMA information
-    get_cpu_info(topology, &cpu_id, &core_numa, &alloc_numa);
+    get_cpu_info(topology, &cpu_id, &core_numa);
 
-    // Allocate memory based on whether NUMA domain is specified
-    if (numa_domain >= 0) {
-        // Use NUMA allocation if domain is specified
-        allocated_memory = numa_alloc_on_node(alloc_size_mb * 1024 * 1024, numa_domain);
-    } else {
-        // Use regular malloc if no NUMA domain specified
-        // This allows external control via numactl --membind
-        allocated_memory = malloc(alloc_size_mb * 1024 * 1024);
-    }
+    // Allocate memory using standard malloc
+    // Note: NUMA binding should be controlled externally using numactl --membind=<node>
+    allocated_memory = malloc(alloc_size_mb * 1024 * 1024);
 
     if (allocated_memory == NULL) {
         fprintf(stderr, "Rank %d: Memory allocation failed\n", rank);
@@ -92,7 +82,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Print results in a table format
-    print_results_table(rank, cpu_id, core_numa, numa_domain, allocated_memory, alloc_size_mb);
+    print_results_table(rank, cpu_id, core_numa, allocated_memory, alloc_size_mb);
 
     // For the last MPI process, show numastat information before cleanup
     if (rank == size - 1) {
@@ -130,33 +120,17 @@ int main(int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
 
     // Cleanup
-    if (numa_domain >= 0) {
-        munmap(allocated_memory, alloc_size_mb * 1024 * 1024);
-    } else {
-        free(allocated_memory);
-    }
+    free(allocated_memory);
     hwloc_topology_destroy(topology);
     MPI_Finalize();
     return 0;
 }
 
-static int parse_args(int argc, char *argv[], int *numa_domain) {
-    *numa_domain = DEFAULT_NUMA_DOMAIN;  // Default to -1 (use regular malloc)
-    
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--numa") == 0 && i + 1 < argc) {
-            char *endptr;
-            long domain = strtol(argv[i + 1], &endptr, 10);
-            if (*endptr == '\0' && domain >= 0) {
-                *numa_domain = (int)domain;
-                i++; // Skip the next argument
-                continue;
-            }
-        }
-        
-        // Handle size parameter (first non-option argument)
+static int parse_args(int argc, char *argv[]) {
+    // Handle size parameter (first argument)
+    if (argc > 1) {
         char *endptr;
-        long size = strtol(argv[i], &endptr, 10);
+        long size = strtol(argv[1], &endptr, 10);
         if (*endptr == '\0' && size > 0) {
             return (int)size;
         }
@@ -164,7 +138,7 @@ static int parse_args(int argc, char *argv[], int *numa_domain) {
     return DEFAULT_ALLOC_SIZE_MB;
 }
 
-static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa, int *alloc_numa) {
+static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa) {
     hwloc_obj_t obj;
     hwloc_cpuset_t cpuset = hwloc_bitmap_alloc();
     
@@ -222,10 +196,6 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
         }
     }
     
-    // Set the allocation NUMA node to match the CPU's NUMA node
-    // (instead of using rank-based mapping)
-    *alloc_numa = *core_numa;
-    
     hwloc_bitmap_free(cpuset);
 }
 
@@ -239,58 +209,8 @@ static int get_numa_node_of_address(void *addr) {
     return -1;
 }
 
-static void* numa_alloc_on_node(size_t size, int node) {
-    void *addr;
-    struct bitmask *nodemask;
-    unsigned long maxnode = numa_max_node() + 1;
-    
-    // Initialize NUMA library if not already initialized
-    if (numa_available() == -1) {
-        fprintf(stderr, "NUMA not available\n");
-        return NULL;
-    }
-    
-    // Create and set up the nodemask
-    nodemask = numa_bitmask_alloc(maxnode);
-    if (nodemask == NULL) {
-        fprintf(stderr, "Failed to allocate nodemask\n");
-        return NULL;
-    }
-    
-    // Set the bit for our target node
-    numa_bitmask_setbit(nodemask, node);
-    
-    // Allocate memory with mmap first
-    addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (addr == MAP_FAILED) {
-        fprintf(stderr, "mmap failed: %s\n", strerror(errno));
-        numa_bitmask_free(nodemask);
-        return NULL;
-    }
-    
-    // Set memory binding using mbind system call
-    if (mbind(addr, size, MPOL_BIND, nodemask->maskp, maxnode, 0) != 0) {
-        fprintf(stderr, "mbind failed: %s\n", strerror(errno));
-        munmap(addr, size);
-        numa_bitmask_free(nodemask);
-        return NULL;
-    }
-    
-    // Touch each page to ensure memory is actually allocated
-    char *mem = (char *)addr;
-    for (size_t i = 0; i < size; i += 4096) {  // Touch each page
-        mem[i] = 0;
-    }
-    
-    // Free the nodemask
-    numa_bitmask_free(nodemask);
-    
-    return addr;
-}
-
-static void print_results_table(int rank, int cpu_id, int core_numa, int alloc_numa, void *addr, size_t size) {
+static void print_results_table(int rank, int cpu_id, int core_numa, void *addr, size_t size) {
     (void)cpu_id;  // Suppress unused parameter warning
-    (void)alloc_numa;  // Suppress unused parameter warning
     char line[256];
     char cpu_list[256] = "N/A";
     
