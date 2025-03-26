@@ -1,5 +1,4 @@
-srun -t "00:60:00" --unbuffered  --nodes 1 --ntasks 8  --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  --hint=nomultithread numactl -
--membind=3 ./numa_allocator --serial 2048
+srun -t "00:60:00" --unbuffered  --nodes 1 --ntasks 8  --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  --hint=nomultithread numactl --membind=3 ./numa_allocator --serial 2048
 srun: job 10045775 queued and waiting for resources
 srun: job 10045775 has been allocated resources
 
