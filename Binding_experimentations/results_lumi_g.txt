@@ -1,0 +1,54 @@
+srun -t "00:60:00" --unbuffered  --nodes 1 --ntasks 8  --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  --hint=nomultithread numactl -
+-membind=3 ./numa_allocator --serial 2048
+srun: job 10045775 queued and waiting for resources
+srun: job 10045775 has been allocated resources
+
+=== Debug Information ===
+MPI Configuration:
+  Number of ranks: 8
+  Command line arguments:
+    argv[0] = ./numa_allocator
+    argv[1] = --serial
+    argv[2] = 2048
+
+System Information:
+  Page size: 4096 bytes
+  Number of NUMA nodes: 4
+  NUMA available: Yes
+  Number of CPUs: 128
+  Current CPU: 1
+  Current NUMA node: 0
+
+Note: NUMA memory binding should be controlled externally using numactl --membind=<node>
+=====================
+
+ ===========================================================================================
+|  MPI  |        CPU     |                             MEMORY                  |  LATENCY   |
+|-------|---------|------|----------------|--------------|-------|-------------|------------|
+| ranks | Cores   | NUMA |     Address    | SIZE (MB)    | NUMA  |  Page Size  | Avg (ns)   |
+|-------|---------|------|----------------|--------------|-------|-------------|------------|
+|  000  | 1       |   0  | 0x425620       | 2048         |   3   | kB=4        | 124.65     |
+|  001  | 9       |   0  | 0x424f80       | 2048         |   3   | kB=4        | 124.76     |
+|  002  | 17      |   1  | 0x424fc0       | 2048         |   3   | kB=4        | 120.75     |
+|  003  | 25      |   1  | 0x424fc0       | 2048         |   3   | kB=4        | 123.03     |
+|  004  | 33      |   2  | 0x425000       | 2048         |   3   | kB=4        | 116.44     |
+|  005  | 41      |   2  | 0x425000       | 2048         |   3   | kB=4        | 114.53     |
+|  006  | 49      |   3  | 0x425040       | 2048         |   3   | kB=4        | 108.24     |
+|  007  | 57      |   3  | 0x425040       | 2048         |   3   | kB=4        | 107.13     |
+ ===========================================================================================  
+
+=== NUMA Statistics for Last Process (Rank 7) ===
+Process ID: 17959
+Allocated Memory Size: 2048 MB
+
+Running numastat...
+[7] 
+[7] Per-node process memory usage (in MBs) for PID 17959 (numa_allocator)
+[7]                            Node 0          Node 1          Node 2          Node 3           Total
+[7]                   --------------- --------------- --------------- --------------- ---------------
+[7] Huge                         0.00            0.00            0.00            0.00            0.00
+[7] Heap                         0.00            0.00            0.00         2050.13         2050.13
+[7] Stack                        0.00            0.00            0.00            0.02            0.02
+[7] Private                      0.51            0.00            0.00           15.20           15.70
+[7] ----------------  --------------- --------------- --------------- --------------- ---------------
+[7] Total                        0.51            0.00            0.00         2065.35         2065.86

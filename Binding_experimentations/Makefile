@@ -2,8 +2,8 @@ CC = cc
 CFLAGS = -Wall -Wextra -O2 -I$(HOME)/TOOLS/hwloc/include
 LDFLAGS = -lnuma -L$(HOME)/TOOLS/hwloc/lib -lhwloc
 
-TARGET = numa_allocator
-SRCS = numa_allocator.c
+TARGET = numa_bench
+SRCS = numa_bench.c
 OBJS = $(SRCS:.c=.o)
 
 .PHONY: all clean

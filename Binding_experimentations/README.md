@@ -1,4 +1,4 @@
-# NUMA Memory Allocator
+# NUMA Memory bench
 
 A tool to demonstrate and test NUMA memory allocation in MPI applications. This tool helps understand how memory is allocated across NUMA nodes and how it relates to CPU affinity.
 
@@ -32,17 +32,17 @@ make
 
 Basic usage:
 ```bash
-srun --nodes 1 --ntasks 56 --distribution=block:block --hint=multithread --cpu-bind=cores ./numa_allocator <size_in_mb>
+srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57 --hint=nomultithread ./numa_bench <size_in_mb>
 ```
 
 With external NUMA control:
 ```bash
-numactl --membind=<node_number> srun --nodes 1 --ntasks 56 --distribution=block:block --hint=multithread --cpu-bind=cores ./numa_allocator <size_in_mb>
+numactl --membind=<node_number> srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57 --hint=nomultithread ./numa_bench <size_in_mb>
 ```
 
 With serial execution mode:
 ```bash
-numactl --membind=<node_number> srun --nodes 1 --ntasks 56 --distribution=block:block --hint=multithread --cpu-bind=cores ./numa_allocator --serial <size_in_mb>
+numactl --membind=<node_number> srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57 --hint=nomultithread ./numa_bench --serial <size_in_mb>
 ```
 
 ## Memory Latency Benchmark
@@ -61,8 +61,8 @@ The benchmark helps identify:
 
 ### Benchmark Configuration
 
-- Number of iterations: 1,000,000 (configurable via `LATENCY_ITERATIONS`)
-- Warm-up iterations: 10,000 (configurable via `WARMUP_ITERATIONS`)
+- Number of iterations: 100,000 (configurable via `LATENCY_ITERATIONS`)
+- Warm-up iterations: 1,000 (configurable via `WARMUP_ITERATIONS`)
 - Random access pattern using Fisher-Yates shuffle algorithm
 - Separate random seed for each MPI rank
 
@@ -96,11 +96,11 @@ Example output on an AMD EPYC 7A53 64-Core Processor:
 ```
 === Debug Information ===
 MPI Configuration:
-  Number of ranks: 56
+  Number of ranks: 8
   Command line arguments:
-    argv[0] = ./numa_allocator
+    argv[0] = ./numa_bench
     argv[1] = --serial
-    argv[2] = 512
+    argv[2] = 2048
 
 System Information:
   Page size: 4096 bytes
@@ -110,77 +110,29 @@ System Information:
   Current CPU: 1
   Current NUMA node: 0
 
- ===========================================================================================
+===========================================================================================
 |  MPI  |        CPU     |                             MEMORY                  |  LATENCY   |
 |-------|---------|------|----------------|--------------|-------|-------------|------------|
 | ranks | Cores   | NUMA |     Address    | SIZE (MB)    | NUMA  |  Page Size  | Avg (ns)   |
 |-------|---------|------|----------------|--------------|-------|-------------|------------|
-|  000  | 1,65    |   0  | 0x48ca40       | 512          |   3   | kB=4        | 126.39     |
-|  001  | 2,66    |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 128.32     |
-|  002  | 3,67    |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 126.38     |
-|  003  | 4,68    |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 130.27     |
-|  004  | 5,69    |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 129.34     |
-|  005  | 6,70    |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 129.53     |
-|  006  | 7,71    |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 131.26     |
-|  007  | 9,73    |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 127.29     |
-|  008  | 10,74   |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 127.00     |
-|  009  | 11,75   |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 126.25     |
-|  010  | 12,76   |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 129.12     |
-|  011  | 13,77   |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 128.49     |
-|  012  | 14,78   |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 131.50     |
-|  013  | 15,79   |   0  | 0x48a2d0       | 512          |   3   | kB=4        | 132.10     |
-|  014  | 17,81   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 120.31     |
-|  015  | 18,82   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 122.05     |
-|  016  | 19,83   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 121.79     |
-|  017  | 20,84   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 123.23     |
-|  018  | 21,85   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 123.43     |
-|  019  | 22,86   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 124.46     |
-|  020  | 23,87   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 124.41     |
-|  021  | 25,89   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 120.85     |
-|  022  | 26,90   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 122.31     |
-|  023  | 27,91   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 122.44     |
-|  024  | 28,92   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 123.66     |
-|  025  | 29,93   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 123.51     |
-|  026  | 30,94   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 125.16     |
-|  027  | 31,95   |   1  | 0x48a2d0       | 512          |   3   | kB=4        | 125.07     |
-|  028  | 33,97   |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 113.16     |
-|  029  | 34,98   |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 114.81     |
-|  030  | 35,99   |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 114.53     |
-|  031  | 36,100  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 115.61     |
-|  032  | 37,101  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 115.98     |
-|  033  | 38,102  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 117.26     |
-|  034  | 39,103  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 117.54     |
-|  035  | 41,105  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 113.60     |
-|  036  | 42,106  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 115.09     |
-|  037  | 43,107  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 114.88     |
-|  038  | 44,108  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 116.47     |
-|  039  | 45,109  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 116.55     |
-|  040  | 46,110  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 117.70     |
-|  041  | 47,111  |   2  | 0x48a2d0       | 512          |   3   | kB=4        | 117.76     |
-|  042  | 49,113  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 107.06     |
-|  043  | 50,114  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 108.70     |
-|  044  | 51,115  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 108.87     |
-|  045  | 52,116  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 110.40     |
-|  046  | 53,117  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 109.97     |
-|  047  | 54,118  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 112.07     |
-|  048  | 55,119  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 112.09     |
-|  049  | 57,121  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 107.99     |
-|  050  | 58,122  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 109.24     |
-|  051  | 59,123  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 109.51     |
-|  052  | 60,124  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 110.45     |
-|  053  | 61,125  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 110.53     |
-|  054  | 62,126  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 111.87     |
-|  055  | 63,127  |   3  | 0x48a2d0       | 512          |   3   | kB=4        | 112.08     |
+|  000  | 1       |   0  | 0x425620       | 2048         |   3   | kB=4        | 124.65     |
+|  001  | 9       |   0  | 0x424f80       | 2048         |   3   | kB=4        | 124.76     |
+|  002  | 17      |   1  | 0x424fc0       | 2048         |   3   | kB=4        | 120.75     |
+|  003  | 25      |   1  | 0x424fc0       | 2048         |   3   | kB=4        | 123.03     |
+|  004  | 33      |   2  | 0x425000       | 2048         |   3   | kB=4        | 116.44     |
+|  005  | 41      |   2  | 0x425000       | 2048         |   3   | kB=4        | 114.53     |
+|  006  | 49      |   3  | 0x425040       | 2048         |   3   | kB=4        | 108.24     |
+|  007  | 57      |   3  | 0x425040       | 2048         |   3   | kB=4        | 107.13     |
 
-Per-node process memory usage (in MBs) for PID 47463 (numa_allocator)
+Per-node process memory usage (in MBs) for PID 17959 (numa_bench)
                            Node 0          Node 1          Node 2          Node 3           Total
                   --------------- --------------- --------------- --------------- ---------------
 Huge                         0.00            0.00            0.00            0.00            0.00
-Heap                         0.00            0.00            0.00          514.50          514.50
+Heap                         0.00            0.00            0.00         2050.13         2050.13
 Stack                        0.00            0.00            0.00            0.02            0.02
-Private                      6.22            0.00            0.00            9.57           15.79
+Private                      0.51            0.00            0.00           15.20           15.70
 ----------------  --------------- --------------- --------------- --------------- ---------------
-Total                        6.22            0.00            0.00          524.10          530.32
+Total                        0.51            0.00            0.00         2065.35         2065.86
 ```
 
 ### Analysis of Results
@@ -189,18 +141,19 @@ The example shows several important characteristics:
 
 1. **NUMA Node Distribution**:
    - The system has 4 NUMA nodes
-   - Each NUMA node has 16 physical cores (32 logical cores with hyperthreading)
+   - Each NUMA node has 2 CCDs (Core Complex Dies)
    - Memory is bound to NUMA node 3 using `numactl --membind=3`
+   - Tasks are mapped to one CPU per CCD (1,9,17,25,33,41,49,57)
 
 2. **Memory Latency Pattern**:
-   - Local access (NUMA node 3): ~107-112 ns
-   - Remote access (NUMA node 2): ~113-117 ns
-   - Remote access (NUMA node 1): ~120-125 ns
-   - Remote access (NUMA node 0): ~126-132 ns
+   - Local access (NUMA node 3): ~107-108 ns
+   - Remote access (NUMA node 2): ~114-116 ns
+   - Remote access (NUMA node 1): ~120-124 ns
+   - Remote access (NUMA node 0): ~124-125 ns
    - Shows clear NUMA locality impact on memory access latency
 
 3. **Memory Allocation**:
-   - Total memory allocated: 512 MB per rank
+   - Total memory allocated: 2048 MB per rank
    - Memory is successfully bound to NUMA node 3
    - Small amounts of memory are allocated on other nodes for system overhead
 
