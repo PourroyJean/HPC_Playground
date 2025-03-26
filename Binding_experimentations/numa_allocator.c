@@ -99,7 +99,6 @@ int main(int argc, char *argv[]) {
         printf("\n=== NUMA Statistics for Last Process (Rank %d) ===\n", rank);
         printf("Process ID: %d\n", getpid());
         printf("Allocated Memory Size: %zu MB\n", alloc_size_mb);
-        printf("NUMA Domain: %d\n", numa_domain);
         
         // Initialize the memory to ensure it's allocated
         size_t total_size = alloc_size_mb * 1024 * 1024;
@@ -193,7 +192,6 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
         if (!current) {
             // If no NUMA node found, try to get it from numa_node_of_cpu
             *core_numa = numa_node_of_cpu(*cpu_id);
-            fprintf(stderr, "Using numa_node_of_cpu: NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
             
             // If we still can't determine the NUMA node, use a reasonable default
             if (*core_numa == -1) {
@@ -329,11 +327,11 @@ static void print_results_table(int rank, int cpu_id, int core_numa, int alloc_n
     
     // Print header for rank 0 only
     if (rank == 0) {
-        printf("\n====================================================================================================\n");
-        printf("|    MPI    |        CPU     |                                   MEMORY                            |\n");
-        printf("|-----------|---------|------|----------------|--------------|-------------|-----------------------|\n");
-        printf("| MPI ranks | Cores   | NUMA |     Address    | SIZE (MB)    | NUMA Binded | Page Size             |\n");
-        printf("|-----------|---------|------|----------------|--------------|-------------|-----------------------|\n");
+        printf("\n ==============================================================================\n");
+        printf("|  MPI  |        CPU     |                             MEMORY                  |\n");
+        printf("|-------|---------|------|----------------|--------------|-------|-------------|\n");
+        printf("| ranks | Cores   | NUMA |     Address    | SIZE (MB)    | NUMA  |  Page Size  |\n");
+        printf("|-------|---------|------|----------------|--------------|-------|-------------|\n");
         fflush(stdout);
     }
     
@@ -344,7 +342,7 @@ static void print_results_table(int rank, int cpu_id, int core_numa, int alloc_n
     char numa_maps_info[256] = "N/A";
     int node = get_numa_node_of_address(addr);
     if (node >= 0) {
-        snprintf(numa_maps_info, sizeof(numa_maps_info), "bind:%d", node);
+        snprintf(numa_maps_info, sizeof(numa_maps_info), "%d", node);
     }
     
     // Get page size
@@ -352,7 +350,7 @@ static void print_results_table(int rank, int cpu_id, int core_numa, int alloc_n
     int page_size_kb = page_size / 1024;
     
     // Print data for each process in order
-    snprintf(line, sizeof(line), "| %03d       | %-7s | %-4d | %-14p | %-12zu | %-11s | kernelpagesize_kB=%-2d |\n",
+    snprintf(line, sizeof(line), "|  %03d  | %-7s |   %-2d | %-14p | %-12zu |   %-2s  | kB=%-8d |\n",
              rank, cpu_list, core_numa, addr, size, numa_maps_info, page_size_kb);
     
     // Print the line and flush
