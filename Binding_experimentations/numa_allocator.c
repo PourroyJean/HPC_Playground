@@ -193,6 +193,14 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
             // If no NUMA node found, try to get it from numa_node_of_cpu
             *core_numa = numa_node_of_cpu(*cpu_id);
             fprintf(stderr, "Using numa_node_of_cpu: NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
+            if (*core_numa == -1 || *core_numa > 2) {  // We know we have 3 NUMA nodes (0,1,2)
+                // Map CPU IDs to NUMA nodes based on rank
+                int rank;
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+                *core_numa = rank % 3;  // Map ranks 0,3,6 to N0, ranks 1,4,7 to N1, ranks 2,5,8 to N2
+                fprintf(stderr, "Using rank-based mapping: NUMA node %d for CPU %d (rank %d)\n", 
+                        *core_numa, *cpu_id, rank);
+            }
         }
     } else {
         // Fallback: try to get CPU ID from sched_getcpu
@@ -205,6 +213,14 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
         if (*cpu_id >= 0) {
             *core_numa = numa_node_of_cpu(*cpu_id);
             fprintf(stderr, "Using sched_getcpu: NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
+            if (*core_numa == -1 || *core_numa > 2) {  // We know we have 3 NUMA nodes (0,1,2)
+                // Map CPU IDs to NUMA nodes based on rank
+                int rank;
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+                *core_numa = rank % 3;  // Map ranks 0,3,6 to N0, ranks 1,4,7 to N1, ranks 2,5,8 to N2
+                fprintf(stderr, "Using rank-based mapping: NUMA node %d for CPU %d (rank %d)\n", 
+                        *core_numa, *cpu_id, rank);
+            }
         } else {
             *cpu_id = -1;
             *core_numa = -1;
