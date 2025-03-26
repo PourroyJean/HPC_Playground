@@ -82,6 +82,7 @@ int main(int argc, char *argv[]) {
         allocated_memory = numa_alloc_on_node(alloc_size_mb * 1024 * 1024, numa_domain);
     } else {
         // Use regular malloc if no NUMA domain specified
+        // This allows external control via numactl --membind
         allocated_memory = malloc(alloc_size_mb * 1024 * 1024);
     }
 
@@ -193,13 +194,11 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
             // If no NUMA node found, try to get it from numa_node_of_cpu
             *core_numa = numa_node_of_cpu(*cpu_id);
             fprintf(stderr, "Using numa_node_of_cpu: NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
-            if (*core_numa == -1 || *core_numa > 2) {  // We know we have 3 NUMA nodes (0,1,2)
-                // Map CPU IDs to NUMA nodes based on rank
-                int rank;
-                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-                *core_numa = rank % 3;  // Map ranks 0,3,6 to N0, ranks 1,4,7 to N1, ranks 2,5,8 to N2
-                fprintf(stderr, "Using rank-based mapping: NUMA node %d for CPU %d (rank %d)\n", 
-                        *core_numa, *cpu_id, rank);
+            
+            // If we still can't determine the NUMA node, use a reasonable default
+            if (*core_numa == -1) {
+                fprintf(stderr, "Warning: Could not determine NUMA node for CPU %d, defaulting to 0\n", *cpu_id);
+                *core_numa = 0;
             }
         }
     } else {
@@ -213,13 +212,11 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
         if (*cpu_id >= 0) {
             *core_numa = numa_node_of_cpu(*cpu_id);
             fprintf(stderr, "Using sched_getcpu: NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
-            if (*core_numa == -1 || *core_numa > 2) {  // We know we have 3 NUMA nodes (0,1,2)
-                // Map CPU IDs to NUMA nodes based on rank
-                int rank;
-                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-                *core_numa = rank % 3;  // Map ranks 0,3,6 to N0, ranks 1,4,7 to N1, ranks 2,5,8 to N2
-                fprintf(stderr, "Using rank-based mapping: NUMA node %d for CPU %d (rank %d)\n", 
-                        *core_numa, *cpu_id, rank);
+            
+            // If we still can't determine the NUMA node, use a reasonable default
+            if (*core_numa == -1) {
+                fprintf(stderr, "Warning: Could not determine NUMA node for CPU %d, defaulting to 0\n", *cpu_id);
+                *core_numa = 0;
             }
         } else {
             *cpu_id = -1;
@@ -227,10 +224,9 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
         }
     }
     
-    // Set the allocation NUMA node based on rank
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    *alloc_numa = rank % 3;  // Map ranks 0,3,6 to N0, ranks 1,4,7 to N1, ranks 2,5,8 to N2
+    // Set the allocation NUMA node to match the CPU's NUMA node
+    // (instead of using rank-based mapping)
+    *alloc_numa = *core_numa;
     
     hwloc_bitmap_free(cpuset);
 }
