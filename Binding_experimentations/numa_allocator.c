@@ -100,22 +100,30 @@ int main(int argc, char *argv[]) {
         printf("Allocated Memory Size: %zu MB\n", alloc_size_mb);
         printf("NUMA Domain: %d\n", numa_domain);
         
-        // Actually use the memory to ensure it's allocated
+        // Initialize the memory to ensure it's allocated
         size_t total_size = alloc_size_mb * 1024 * 1024;
         char *mem = (char *)allocated_memory;
         for (size_t i = 0; i < total_size; i += 4096) {  // Touch each page
             mem[i] = 0;
         }
         
+        // Signal other processes that we're ready to run numastat
+        MPI_Barrier(MPI_COMM_WORLD);
+        
         printf("\nRunning numastat...\n");
         char cmd[256];
-        snprintf(cmd, sizeof(cmd), "numastat -p %d", getpid());
+        snprintf(cmd, sizeof(cmd), "numastat -p %d | sed 's/^/[%d] /'", getpid(), rank);
         system(cmd);
         printf("==============================================\n\n");
         fflush(stdout);
         
-        // Add a small delay to ensure memory is still allocated
-        sleep(1);
+        // Signal other processes that numastat is done
+        MPI_Barrier(MPI_COMM_WORLD);
+    } else {
+        // Other processes wait for the last process to be ready
+        MPI_Barrier(MPI_COMM_WORLD);
+        // Wait for numastat to complete
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 
     // Ensure all processes are synchronized before cleanup
@@ -185,14 +193,6 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
             // If no NUMA node found, try to get it from numa_node_of_cpu
             *core_numa = numa_node_of_cpu(*cpu_id);
             fprintf(stderr, "Using numa_node_of_cpu: NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
-            if (*core_numa == -1 || *core_numa > 2) {  // We know we have 3 NUMA nodes (0,1,2)
-                // Map CPU IDs to NUMA nodes based on rank
-                int rank;
-                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-                *core_numa = rank % 3;  // Map ranks 0,3,6 to N0, ranks 1,4,7 to N1, ranks 2,5,8 to N2
-                fprintf(stderr, "Using rank-based mapping: NUMA node %d for CPU %d (rank %d)\n", 
-                        *core_numa, *cpu_id, rank);
-            }
         }
     } else {
         // Fallback: try to get CPU ID from sched_getcpu
@@ -205,14 +205,6 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
         if (*cpu_id >= 0) {
             *core_numa = numa_node_of_cpu(*cpu_id);
             fprintf(stderr, "Using sched_getcpu: NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
-            if (*core_numa == -1 || *core_numa > 2) {  // We know we have 3 NUMA nodes (0,1,2)
-                // Map CPU IDs to NUMA nodes based on rank
-                int rank;
-                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-                *core_numa = rank % 3;  // Map ranks 0,3,6 to N0, ranks 1,4,7 to N1, ranks 2,5,8 to N2
-                fprintf(stderr, "Using rank-based mapping: NUMA node %d for CPU %d (rank %d)\n", 
-                        *core_numa, *cpu_id, rank);
-            }
         } else {
             *cpu_id = -1;
             *core_numa = -1;
@@ -229,7 +221,6 @@ static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa,
 
 static int get_numa_node_of_address(void *addr) {
     unsigned long node;
-    unsigned long maxnode = numa_max_node() + 1;
     
     if (get_mempolicy((int *)&node, NULL, 0, addr, MPOL_F_NODE | MPOL_F_ADDR) == 0) {
         return (int)node;
@@ -275,8 +266,11 @@ static void* numa_alloc_on_node(size_t size, int node) {
         return NULL;
     }
     
-    // Touch the memory to ensure it's allocated
-    memset(addr, 0, size);
+    // Touch each page to ensure memory is actually allocated
+    char *mem = (char *)addr;
+    for (size_t i = 0; i < size; i += 4096) {  // Touch each page
+        mem[i] = 0;
+    }
     
     // Free the nodemask
     numa_bitmask_free(nodemask);
@@ -285,6 +279,8 @@ static void* numa_alloc_on_node(size_t size, int node) {
 }
 
 static void print_results_table(int rank, int cpu_id, int core_numa, int alloc_numa, void *addr, size_t size) {
+    (void)cpu_id;  // Suppress unused parameter warning
+    (void)alloc_numa;  // Suppress unused parameter warning
     char line[256];
     char cpu_list[256] = "N/A";
     
