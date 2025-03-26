@@ -101,6 +101,10 @@ The tool provides detailed information about:
 
 Example output on an AMD EPYC 7A53 64-Core Processor:
 ```
+srun --nodes 1 --ntasks 8  --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  --hint=nomultithread numactl -
+-membind=3 ./numa_allocator --serial 2048
+
+
 === Debug Information ===
 MPI Configuration:
   Number of ranks: 8
