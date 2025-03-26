@@ -19,8 +19,8 @@
 #define DEFAULT_ALLOC_SIZE_MB 512
 
 // Number of iterations for the latency benchmark
-#define LATENCY_ITERATIONS 100000    // au lieu de 1000000
-#define WARMUP_ITERATIONS 1000       // au lieu de 10000
+#define LATENCY_ITERATIONS 100000  // Chosen for good accuracy/speed balance
+#define WARMUP_ITERATIONS 1000     // Enough to warm caches effectively   
 
 // Function declarations
 static int parse_args(int argc, char *argv[], int *serial_mode);
@@ -126,6 +126,7 @@ int main(int argc, char *argv[]) {
 
     // For the last MPI process, show numastat information before cleanup
     if (rank == size - 1) {
+        printf(" ===========================================================================================\n");
         printf("\n=== NUMA Statistics for Last Process (Rank %d) ===\n", rank);
         printf("Process ID: %d\n", getpid());
         printf("Allocated Memory Size: %zu MB\n", alloc_size_mb);
@@ -213,9 +214,10 @@ static double measure_memory_latency(void *memory, size_t size) {
     // Set up the pointer-chasing linked list
     size_t num_pointers = size / sizeof(void*);
     void **pointers = (void**)memory;
+    size_t *indices = NULL;
     
     // Create an array of indices and shuffle them
-    size_t *indices = malloc(num_pointers * sizeof(size_t));
+    indices = malloc(num_pointers * sizeof(size_t));
     if (!indices) {
         fprintf(stderr, "Failed to allocate indices array for latency test\n");
         return -1.0;
@@ -236,18 +238,18 @@ static double measure_memory_latency(void *memory, size_t size) {
     pointers[indices[num_pointers - 1]] = &pointers[indices[0]];
     
     // Warm up the cache and ensure memory is paged in
-    void **p = &pointers[indices[0]];
+    volatile void **p = (volatile void **)&pointers[indices[0]];
     for (int i = 0; i < WARMUP_ITERATIONS; i++) {
-        p = *p;
+        p = (volatile void **)*p;
     }
     
     // Measure memory access time
     double start_time = MPI_Wtime();
     
     // Chase pointers through memory
-    p = &pointers[indices[0]];
+    p = (volatile void **)&pointers[indices[0]];
     for (int i = 0; i < LATENCY_ITERATIONS; i++) {
-        p = *p;
+        p = (volatile void **)*p;
     }
     
     double end_time = MPI_Wtime();
@@ -261,6 +263,7 @@ static double measure_memory_latency(void *memory, size_t size) {
         fprintf(stderr, "Should never happen but prevents optimization\n");
     }
     
+    // Clean up indices array
     free(indices);
     return latency_ns;
 }
@@ -368,7 +371,7 @@ static void print_results_table(int rank, int cpu_id, int core_numa, void *addr,
     
     // Print header for rank 0 only
     if (rank == 0) {
-        printf("\n ========================================================================================\n");
+        printf("\n ===========================================================================================\n");
         printf("|  MPI  |        CPU     |                             MEMORY                  |  LATENCY   |\n");
         printf("|-------|---------|------|----------------|--------------|-------|-------------|------------|\n");
         printf("| ranks | Cores   | NUMA |     Address    | SIZE (MB)    | NUMA  |  Page Size  | Avg (ns)   |\n");
@@ -397,4 +400,5 @@ static void print_results_table(int rank, int cpu_id, int core_numa, void *addr,
     // Print the line and flush
     printf("%s", line);
     fflush(stdout);
+    MPI_Barrier(MPI_COMM_WORLD);
 } 
