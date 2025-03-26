@@ -19,8 +19,8 @@
 #define DEFAULT_ALLOC_SIZE_MB 512
 
 // Number of iterations for the latency benchmark
-#define LATENCY_ITERATIONS 1000000
-#define WARMUP_ITERATIONS 10000
+#define LATENCY_ITERATIONS 100000    // au lieu de 1000000
+#define WARMUP_ITERATIONS 1000       // au lieu de 10000
 
 // Function declarations
 static int parse_args(int argc, char *argv[], int *serial_mode);
@@ -183,6 +183,32 @@ static void shuffle(size_t *array, size_t n) {
     }
 }
 
+/*
+ * Measure memory latency using pointer chasing technique
+ * 
+ * This function:
+ * 1. Creates a linked list of pointers in the allocated memory
+ * 2. Randomizes the pointer chain to prevent CPU prefetching
+ * 3. Uses volatile pointers to prevent compiler optimizations
+ * 4. Measures the time taken to traverse this random path
+ * 
+ * Why pointer chasing?
+ * - Forces actual memory accesses
+ * - Prevents CPU prefetching by using random access pattern
+ * - Each access must wait for the previous one to complete
+ * 
+ * Why volatile?
+ * - Prevents compiler from optimizing away the pointer chase loop
+ * - Ensures each memory access is actually performed
+ * - Gives more accurate latency measurements
+ * 
+ * Parameters:
+ *   memory: Pointer to the allocated memory region
+ *   size: Size of the memory region in bytes
+ * 
+ * Returns:
+ *   Average latency per memory access in nanoseconds
+ */
 static double measure_memory_latency(void *memory, size_t size) {
     // Set up the pointer-chasing linked list
     size_t num_pointers = size / sizeof(void*);
