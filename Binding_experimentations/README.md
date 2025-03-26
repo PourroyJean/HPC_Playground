@@ -1,18 +1,25 @@
-# NUMA Memory bench
+## NUMA Memory Latency Benchmark
 
-A tool to demonstrate and test NUMA memory allocation in MPI applications. This tool helps understand how memory is allocated across NUMA nodes and how it relates to CPU affinity.
+This project provides an MPI-based benchmark tool designed to measure memory latency across different NUMA (Non-Uniform Memory Access) domains using a pointer-chasing approach. The primary goal is to demonstrate how memory access latency varies depending on the NUMA node proximity between CPU cores and the allocated memory region.
 
-## Features
+## Key Features
 
-- Memory allocation with external NUMA control via `numactl --membind`
-- Shows CPU affinity and NUMA node information for each MPI process
-- Displays memory allocation statistics using `numastat`
-- Provides detailed information about CPU cores and their NUMA node assignments
-- Memory latency benchmark using pointer-chasing technique:
-  - Measures memory access latency in nanoseconds
-  - Uses randomized pointer chasing to prevent hardware prefetching
-  - Reports per-rank memory latency statistics
-  - Helps identify NUMA-related performance impacts
+- Pointer-chasing method: Accurately measures memory latency by creating a randomized linked list, thus preventing CPU caching and prefetching effects.
+
+- MPI Parallelism: Supports parallel and serial measurement modes across multiple MPI ranks.
+
+- Flexible Allocation: Allocates memory using standard methods, allowing external control of NUMA bindings (e.g., via numactl).
+
+- Detailed Reporting: Provides clear, tabular output of latency measurements per MPI rank, alongside detailed system diagnostics.
+
+## How It Works
+
+- Each MPI rank allocates a specified amount of memory and initializes it as a randomly ordered linked list of pointers.
+
+- The benchmark then measures the average time required to traverse this list, accurately reflecting the real memory latency experienced by the CPU.
+
+
+
 
 ## Requirements
 
