@@ -1,6 +1,7 @@
 CC = cc
-CFLAGS = -Wall -Wextra -O2 -I$(HOME)/TOOLS/hwloc/include
-LDFLAGS = -lnuma -L$(HOME)/TOOLS/hwloc/lib -lhwloc
+HWLOC_DIR ?= $(HOME)/TOOLS/hwloc
+CFLAGS = -Wall -Wextra -O2 -I$(HWLOC_DIR)/include
+LDFLAGS = -lnuma -L$(HWLOC_DIR)/lib -lhwloc
 
 TARGET = numa_bench
 SRCS = numa_bench.c
