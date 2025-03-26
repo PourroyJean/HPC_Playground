@@ -286,64 +286,38 @@ static int parse_args(int argc, char *argv[], int *serial_mode) {
 }
 
 static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa) {
-    hwloc_obj_t obj;
-    hwloc_cpuset_t cpuset = hwloc_bitmap_alloc();
+    // Get current CPU directly using sched_getcpu
+    #ifdef _GNU_SOURCE
+    *cpu_id = sched_getcpu();
+    #else
+    *cpu_id = -1;
+    #endif
     
-    // Get current CPU set
-    if (hwloc_get_cpubind(topology, cpuset, 0) < 0) {
-        hwloc_get_last_cpu_location(topology, cpuset, 0);
-    }
-    
-    // Get the CPU object
-    obj = hwloc_get_first_largest_obj_inside_cpuset(topology, cpuset);
-    if (obj) {
-        *cpu_id = obj->logical_index;
-        
-        // Find the NUMA node by traversing up the topology tree
-        hwloc_obj_t current = obj;
-        while (current) {
-            if (current->type == HWLOC_OBJ_NUMANODE) {
-                *core_numa = current->logical_index;
-                fprintf(stderr, "Found NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
-                break;
-            }
-            current = current->parent;
-        }
-        
-        if (!current) {
-            // If no NUMA node found, try to get it from numa_node_of_cpu
-            *core_numa = numa_node_of_cpu(*cpu_id);
-            
-            // If we still can't determine the NUMA node, use a reasonable default
-            if (*core_numa == -1) {
-                fprintf(stderr, "Warning: Could not determine NUMA node for CPU %d, defaulting to 0\n", *cpu_id);
-                *core_numa = 0;
-            }
+    if (*cpu_id >= 0) {
+        // Get NUMA node for the current CPU
+        *core_numa = numa_node_of_cpu(*cpu_id);
+        if (*core_numa == -1) {
+            fprintf(stderr, "Warning: Could not determine NUMA node for CPU %d, defaulting to 0\n", *cpu_id);
+            *core_numa = 0;
         }
     } else {
-        // Fallback: try to get CPU ID from sched_getcpu
-        #ifdef _GNU_SOURCE
-        *cpu_id = sched_getcpu();
-        #else
-        *cpu_id = -1;
-        #endif
+        // Fallback to hwloc if sched_getcpu fails
+        hwloc_cpuset_t cpuset = hwloc_bitmap_alloc();
+        if (hwloc_get_cpubind(topology, cpuset, 0) < 0) {
+            hwloc_get_last_cpu_location(topology, cpuset, 0);
+        }
         
-        if (*cpu_id >= 0) {
+        hwloc_obj_t obj = hwloc_get_first_largest_obj_inside_cpuset(topology, cpuset);
+        if (obj) {
+            *cpu_id = obj->logical_index;
             *core_numa = numa_node_of_cpu(*cpu_id);
-            fprintf(stderr, "Using sched_getcpu: NUMA node %d for CPU %d\n", *core_numa, *cpu_id);
-            
-            // If we still can't determine the NUMA node, use a reasonable default
-            if (*core_numa == -1) {
-                fprintf(stderr, "Warning: Could not determine NUMA node for CPU %d, defaulting to 0\n", *cpu_id);
-                *core_numa = 0;
-            }
         } else {
             *cpu_id = -1;
             *core_numa = -1;
         }
+        
+        hwloc_bitmap_free(cpuset);
     }
-    
-    hwloc_bitmap_free(cpuset);
 }
 
 static int get_numa_node_of_address(void *addr) {
