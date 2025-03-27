@@ -176,3 +176,29 @@ The example shows several important characteristics:
 - CPU affinity information is obtained using hwloc
 - The memory latency benchmark uses pointer chasing to measure actual memory access times
 - Latency measurements help identify NUMA-related performance impacts
+
+## Future Enhancements
+
+The following features are planned for future development:
+
+- [ ] Memory Bandwidth Measurements
+  - [ ] Add bandwidth measurement alongside latency
+  - [ ] Implement different access patterns (sequential, random, strided)
+  - [ ] Support for both read and write bandwidth tests
+
+- [ ] Multi-Size Memory Testing
+  - [ ] Support for testing multiple allocation sizes in a single run
+  - [ ] Automatic size progression (e.g., 1MB to 1GB)
+  - [ ] Comparison of latency/bandwidth across different sizes
+  - [ ] Detection of memory size thresholds affecting performance
+
+- [ ] Enhanced Visualization and Reporting
+  - [ ] Export results in CSV/JSON format for external analysis
+  - [ ] Support for comparing multiple test runs
+
+- [ ] Per-Task NUMA Domain Assignment
+  - [ ] Allow specifying different NUMA domains for each MPI task
+  - [ ] Support for NUMA domain mapping via command line arguments
+  - [ ] Enable testing of cross-NUMA node memory access patterns
+  - [ ] Provide flexibility in memory placement strategies
+
