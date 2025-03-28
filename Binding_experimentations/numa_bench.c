@@ -18,25 +18,37 @@
 // Default allocation size in MB
 #define DEFAULT_ALLOC_SIZE_MB 512
 
+// Maximum number of different sizes to test
+#define MAX_SIZES 18
+
+// Standard sizes for range expansion
+#define NUM_STANDARD_SIZES 18
+const size_t STANDARD_SIZES[NUM_STANDARD_SIZES] = {
+    1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072
+};
+
 // Number of iterations for the latency benchmark
 #define LATENCY_ITERATIONS 100000  // Chosen for good accuracy/speed balance
 #define WARMUP_ITERATIONS 1000     // Enough to warm caches effectively   
 
 // Function declarations
-static int parse_args(int argc, char *argv[], int *serial_mode);
+static int parse_args(int argc, char *argv[], int *serial_mode, size_t *sizes, int *num_sizes);
 static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa);
 static int get_numa_node_of_address(void *addr);
-static void print_results_table(int rank, int cpu_id, int core_numa, void *addr, size_t size, double latency_ns);
+static void print_results_table_header(int num_sizes, size_t *sizes);
+static void print_results_table_row(int rank, int size, int cpu_id, int core_numa, void *addr, int num_sizes, double *latencies);
+static void print_results_table_footer(int num_sizes);
 static double measure_memory_latency(void *memory, size_t size);
 static void shuffle(size_t *array, size_t n);
 
 int main(int argc, char *argv[]) {
     int rank, size;
-    size_t alloc_size_mb;
-    void *allocated_memory;
+    size_t sizes[MAX_SIZES];
+    int num_sizes = 0;
+    void *allocated_memory = NULL;
     hwloc_topology_t topology;
     int cpu_id, core_numa;
-    double latency_ns = -1.0;
+    double *latencies;
     int serial_mode = 0;
 
     // Initialize MPI
@@ -71,7 +83,10 @@ int main(int argc, char *argv[]) {
     }
 
     // Parse command line arguments
-    alloc_size_mb = parse_args(argc, argv, &serial_mode);
+    if (parse_args(argc, argv, &serial_mode, sizes, &num_sizes) != 0) {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
+    }
 
     // Initialize hwloc topology with specific flags
     hwloc_topology_init(&topology);
@@ -81,58 +96,102 @@ int main(int argc, char *argv[]) {
     // Get CPU and NUMA information
     get_cpu_info(topology, &cpu_id, &core_numa);
 
-    // Allocate memory using standard malloc
-    // Note: NUMA binding should be controlled externally using numactl --membind=<node>
-    allocated_memory = malloc(alloc_size_mb * 1024 * 1024);
-
-    if (allocated_memory == NULL) {
-        fprintf(stderr, "Rank %d: Memory allocation failed\n", rank);
+    // Allocate memory for storing latency results
+    latencies = (double *)malloc(num_sizes * sizeof(double));
+    if (!latencies) {
+        fprintf(stderr, "Rank %d: Failed to allocate latency results array\n", rank);
         MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
     }
 
-    // Measure memory latency
-    if (serial_mode) {
-        // In serial mode, only one rank runs the benchmark at a time
-        double *all_latencies = malloc(size * sizeof(double));
-        if (!all_latencies) {
-            fprintf(stderr, "Failed to allocate latency array\n");
+    // Loop through each memory size
+    for (int i = 0; i < num_sizes; i++) {
+        size_t current_size_mb = sizes[i];
+        
+        // Free previous allocation if any
+        if (allocated_memory != NULL) {
+            free(allocated_memory);
+            allocated_memory = NULL;
+        }
+        
+        // Allocate memory using standard malloc
+        // Note: NUMA binding should be controlled externally using numactl --membind=<node>
+        allocated_memory = malloc(current_size_mb * 1024 * 1024);
+
+        if (allocated_memory == NULL) {
+            fprintf(stderr, "Rank %d: Memory allocation failed for size %zu MB\n", rank, current_size_mb);
+            free(latencies);
             MPI_Abort(MPI_COMM_WORLD, 1);
+            return 1;
         }
 
-        for (int current_rank = 0; current_rank < size; current_rank++) {
-            if (rank == current_rank) {
-                // Current rank runs the benchmark
-                all_latencies[current_rank] = measure_memory_latency(allocated_memory, alloc_size_mb * 1024 * 1024);
-                // Broadcast the result to all ranks
-                MPI_Bcast(&all_latencies[current_rank], 1, MPI_DOUBLE, current_rank, MPI_COMM_WORLD);
-            } else {
-                // Other ranks wait for the current rank to finish
-                MPI_Bcast(&all_latencies[current_rank], 1, MPI_DOUBLE, current_rank, MPI_COMM_WORLD);
+        // Ensure all ranks proceed to measurement at the same time
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        // Measure memory latency
+        if (serial_mode) {
+            // In serial mode, only one rank runs the benchmark at a time
+            double *all_latencies = malloc(size * sizeof(double));
+            if (!all_latencies) {
+                fprintf(stderr, "Failed to allocate latency array\n");
+                free(latencies);
+                free(allocated_memory);
+                MPI_Abort(MPI_COMM_WORLD, 1);
+                return 1;
             }
-            // Synchronize all ranks before moving to the next one
-            MPI_Barrier(MPI_COMM_WORLD);
+
+            for (int current_rank = 0; current_rank < size; current_rank++) {
+                if (rank == current_rank) {
+                    // Current rank runs the benchmark
+                    all_latencies[current_rank] = measure_memory_latency(allocated_memory, current_size_mb * 1024 * 1024);
+                    // Broadcast the result to all ranks
+                    MPI_Bcast(&all_latencies[current_rank], 1, MPI_DOUBLE, current_rank, MPI_COMM_WORLD);
+                } else {
+                    // Other ranks wait for the current rank to finish
+                    MPI_Bcast(&all_latencies[current_rank], 1, MPI_DOUBLE, current_rank, MPI_COMM_WORLD);
+                }
+                // Synchronize all ranks before moving to the next one
+                MPI_Barrier(MPI_COMM_WORLD);
+            }
+
+            // Each rank uses its own latency result
+            latencies[i] = all_latencies[rank];
+            free(all_latencies);
+        } else {
+            // In parallel mode, all ranks run the benchmark simultaneously
+            latencies[i] = measure_memory_latency(allocated_memory, current_size_mb * 1024 * 1024);
         }
 
-        // Each rank uses its own latency result
-        latency_ns = all_latencies[rank];
-        free(all_latencies);
-    } else {
-        // In parallel mode, all ranks run the benchmark simultaneously
-        latency_ns = measure_memory_latency(allocated_memory, alloc_size_mb * 1024 * 1024);
+        // Ensure all ranks have completed this size before moving to the next
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 
     // Print results in a table format
-    print_results_table(rank, cpu_id, core_numa, allocated_memory, alloc_size_mb, latency_ns);
+    if (rank == 0) {
+        print_results_table_header(num_sizes, sizes);
+    }
+    
+    // Ensure header is printed before rows
+    MPI_Barrier(MPI_COMM_WORLD);
+    
+    // Print each rank's row
+    print_results_table_row(rank, size, cpu_id, core_numa, allocated_memory, num_sizes, latencies);
+    
+    // Ensure all rows are printed before footer
+    MPI_Barrier(MPI_COMM_WORLD);
+    
+    if (rank == 0) {
+        print_results_table_footer(num_sizes);
+    }
 
     // For the last MPI process, show numastat information before cleanup
     if (rank == size - 1) {
-        printf(" ===========================================================================================\n");
         printf("\n=== NUMA Statistics for Last Process (Rank %d) ===\n", rank);
         printf("Process ID: %d\n", getpid());
-        printf("Allocated Memory Size: %zu MB\n", alloc_size_mb);
+        printf("Allocated Memory Size: %zu MB\n", sizes[num_sizes-1]);
         
         // Initialize the memory to ensure it's allocated
-        size_t total_size = alloc_size_mb * 1024 * 1024;
+        size_t total_size = sizes[num_sizes-1] * 1024 * 1024;
         char *mem = (char *)allocated_memory;
         for (size_t i = 0; i < total_size; i += 4096) {  // Touch each page
             mem[i] = 0;
@@ -161,7 +220,10 @@ int main(int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
 
     // Cleanup
-    free(allocated_memory);
+    if (allocated_memory != NULL) {
+        free(allocated_memory);
+    }
+    free(latencies);
     hwloc_topology_destroy(topology);
     MPI_Finalize();
     return 0;
@@ -268,9 +330,35 @@ static double measure_memory_latency(void *memory, size_t size) {
     return latency_ns;
 }
 
-static int parse_args(int argc, char *argv[], int *serial_mode) {
+// Helper function to add a size to the size array if it's not already there
+static int add_size_if_unique(size_t *sizes, int *num_sizes, size_t size_to_add) {
+    // Check if we've hit the maximum number of sizes
+    if (*num_sizes >= MAX_SIZES) {
+        return -1; // Too many sizes
+    }
+    
+    // Verify the size is positive
+    if (size_to_add <= 0) {
+        return -2; // Invalid size
+    }
+    
+    // Check if size already exists in the array
+    for (int i = 0; i < *num_sizes; i++) {
+        if (sizes[i] == size_to_add) {
+            return 0; // Size already exists, no need to add
+        }
+    }
+    
+    // Add the size to the array
+    sizes[*num_sizes] = size_to_add;
+    (*num_sizes)++;
+    return 0;
+}
+
+static int parse_args(int argc, char *argv[], int *serial_mode, size_t *sizes, int *num_sizes) {
     *serial_mode = 0;
-    int size = DEFAULT_ALLOC_SIZE_MB;
+    *num_sizes = 0;
+    int size_argument_found = 0;
     
     // Handle command line arguments
     for (int i = 1; i < argc; i++) {
@@ -282,14 +370,119 @@ static int parse_args(int argc, char *argv[], int *serial_mode) {
         // Check for --size option
         if (strncmp(argv[i], "--size=", 7) == 0) {
             char *size_str = argv[i] + 7;
-            char *endptr;
-            long parsed_size = strtol(size_str, &endptr, 10);
-            if (*endptr == '\0' && parsed_size > 0) {
-                size = (int)parsed_size;
-            } else {
-                fprintf(stderr, "Warning: Invalid size value '%s', using default %d MB\n", 
-                        size_str, DEFAULT_ALLOC_SIZE_MB);
+            
+            // Check if we already processed a size argument
+            if (size_argument_found) {
+                fprintf(stderr, "Error: Multiple --size arguments provided\n");
+                return -1;
             }
+            
+            size_argument_found = 1;
+            
+            // Check for range format (e.g., 128-1024)
+            char *dash = strchr(size_str, '-');
+            if (dash) {
+                *dash = '\0'; // Split the string at the dash
+                char *start_str = size_str;
+                char *end_str = dash + 1;
+                
+                // Parse start and end of range
+                char *endptr;
+                long start_size = strtol(start_str, &endptr, 10);
+                if (*endptr != '\0' || start_size <= 0) {
+                    fprintf(stderr, "Error: Invalid range start value '%s'\n", start_str);
+                    return -1;
+                }
+                
+                long end_size = strtol(end_str, &endptr, 10);
+                if (*endptr != '\0' || end_size <= 0) {
+                    fprintf(stderr, "Error: Invalid range end value '%s'\n", end_str);
+                    return -1;
+                }
+                
+                if (start_size > end_size) {
+                    fprintf(stderr, "Error: Range start (%ld) is greater than range end (%ld)\n", 
+                            start_size, end_size);
+                    return -1;
+                }
+                
+                // Find indices in standard size array
+                int start_idx = -1, end_idx = -1;
+                for (int j = 0; j < NUM_STANDARD_SIZES; j++) {
+                    if (STANDARD_SIZES[j] >= (size_t)start_size && start_idx == -1) {
+                        start_idx = j;
+                    }
+                    if (STANDARD_SIZES[j] <= (size_t)end_size) {
+                        end_idx = j;
+                    }
+                }
+                
+                if (start_idx == -1 || end_idx == -1 || start_idx > end_idx) {
+                    fprintf(stderr, "Error: Unable to find standard sizes in range %ld-%ld\n", 
+                            start_size, end_size);
+                    fprintf(stderr, "Valid range is from %zu to %zu MB\n", 
+                            STANDARD_SIZES[0], STANDARD_SIZES[NUM_STANDARD_SIZES-1]);
+                    return -1;
+                }
+                
+                // Add all sizes in the range
+                for (int j = start_idx; j <= end_idx; j++) {
+                    if (add_size_if_unique(sizes, num_sizes, STANDARD_SIZES[j]) < 0) {
+                        fprintf(stderr, "Error: Too many sizes specified (max %d)\n", MAX_SIZES);
+                        return -1;
+                    }
+                }
+            }
+            // Check for comma-separated list (e.g., 128,512,1024)
+            else if (strchr(size_str, ',')) {
+                char *token;
+                char *saveptr;
+                char *size_list = strdup(size_str); // Create a copy to tokenize
+                
+                if (!size_list) {
+                    fprintf(stderr, "Error: Memory allocation failed for size list\n");
+                    return -1;
+                }
+                
+                // Parse comma-separated list
+                token = strtok_r(size_list, ",", &saveptr);
+                while (token != NULL) {
+                    char *endptr;
+                    long parsed_size = strtol(token, &endptr, 10);
+                    
+                    if (*endptr != '\0' || parsed_size <= 0) {
+                        fprintf(stderr, "Error: Invalid size value '%s' in list\n", token);
+                        free(size_list);
+                        return -1;
+                    }
+                    
+                    if (add_size_if_unique(sizes, num_sizes, (size_t)parsed_size) < 0) {
+                        fprintf(stderr, "Error: Too many sizes specified (max %d)\n", MAX_SIZES);
+                        free(size_list);
+                        return -1;
+                    }
+                    
+                    token = strtok_r(NULL, ",", &saveptr);
+                }
+                
+                free(size_list);
+            }
+            // Single value format (e.g., 512)
+            else {
+                char *endptr;
+                long parsed_size = strtol(size_str, &endptr, 10);
+                
+                if (*endptr != '\0' || parsed_size <= 0) {
+                    fprintf(stderr, "Error: Invalid size value '%s'\n", size_str);
+                    return -1;
+                }
+                
+                if (add_size_if_unique(sizes, num_sizes, (size_t)parsed_size) < 0) {
+                    fprintf(stderr, "Error: Too many sizes specified (max %d)\n", MAX_SIZES);
+                    return -1;
+                }
+            }
+            
             continue;
         }
         
@@ -297,7 +490,13 @@ static int parse_args(int argc, char *argv[], int *serial_mode) {
         fprintf(stderr, "Warning: Unrecognized option '%s'\n", argv[i]);
     }
     
-    return size;
+    // If no size was specified, use the default
+    if (*num_sizes == 0) {
+        sizes[0] = DEFAULT_ALLOC_SIZE_MB;
+        *num_sizes = 1;
+    }
+    
+    return 0;
 }
 
 static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa) {
@@ -345,72 +544,149 @@ static int get_numa_node_of_address(void *addr) {
     return -1;
 }
 
-static void print_results_table(int rank, int cpu_id, int core_numa, void *addr, size_t size, double latency_ns) {
-    (void)cpu_id;  // Suppress unused parameter warning
-    char line[256];
-    char cpu_list[256] = "N/A";
+static void print_results_table_header(int num_sizes, size_t *sizes) {
+    // Calculate the width for latency section based on number of sizes
+    const int column_width = 9; // Fixed width for each column (7 for value + 1 space + 1 separator)
+    int latency_section_width = num_sizes * column_width + 1; // +1 for final separator
     
-    // Get CPU affinity information using hwloc
-    hwloc_topology_t topology;
-    hwloc_topology_init(&topology);
-    hwloc_topology_set_flags(topology, HWLOC_TOPOLOGY_FLAG_WHOLE_SYSTEM);
-    hwloc_topology_load(topology);
+    // Calculate padding for centering "LATENCY (ns)"
+    int latency_text_length = 13; // Length of "LATENCY (ns)"
+    int padding_before = (latency_section_width - latency_text_length) / 2;
+    int padding_after = latency_section_width - latency_text_length - padding_before;
     
-    hwloc_cpuset_t cpuset = hwloc_bitmap_alloc();
-    if (hwloc_get_cpubind(topology, cpuset, 0) == 0) {
-        int first = -1;
-        int last = -1;
-        int count = 0;
-        
-        // Get the first and last CPU in the set
-        first = hwloc_bitmap_first(cpuset);
-        last = hwloc_bitmap_last(cpuset);
-        count = hwloc_bitmap_weight(cpuset);
-        
-        if (count > 0) {
-            // For hyperthreading, we expect exactly 2 cores (physical + hyperthread)
-            if (count == 2) {
-                snprintf(cpu_list, sizeof(cpu_list), "%d,%d", first, last);
-            } else {
-                // Fallback to showing just the current CPU
-                snprintf(cpu_list, sizeof(cpu_list), "%d", first);
-            }
-        }
+    // Calculate total width of the entire table
+    int fixed_section_width = 40; // Width of MPI+CPU+MEMORY sections (reduced by 6)
+    int total_width = fixed_section_width + latency_section_width;
+    
+    // Print top line
+    printf("\n ");
+    for (int i = 0; i < total_width; i++) {
+        printf("=");
+    }
+    printf("\n");
+    
+    // Print header row with LATENCY centered
+    printf("|  MPI  |        CPU     |            MEMORY    |");
+    
+    // Print padding before LATENCY
+    for (int i = 0; i < padding_before; i++) {
+        printf(" ");
     }
     
-    hwloc_bitmap_free(cpuset);
-    hwloc_topology_destroy(topology);
+    printf("LATENCY (ns)");
     
-    // Print header for rank 0 only
-    if (rank == 0) {
-        printf("\n ===========================================================================================\n");
-        printf("|  MPI  |        CPU     |                             MEMORY                  |  LATENCY   |\n");
-        printf("|-------|---------|------|----------------|--------------|-------|-------------|------------|\n");
-        printf("| ranks | Cores   | NUMA |     Address    | SIZE (MB)    | NUMA  |  Page Size  | Avg (ns)   |\n");
-        printf("|-------|---------|------|----------------|--------------|-------|-------------|------------|\n");
-        fflush(stdout);
+    // Print padding after LATENCY
+    for (int i = 0; i < padding_after; i++) {
+        printf(" ");
     }
+    printf("|\n");
     
-    // Ensure all processes are synchronized before printing data
-    MPI_Barrier(MPI_COMM_WORLD);
-    
-    // Get NUMA maps information
-    char numa_maps_info[256] = "N/A";
-    int node = get_numa_node_of_address(addr);
-    if (node >= 0) {
-        snprintf(numa_maps_info, sizeof(numa_maps_info), "%d", node);
+    // Print first separator line
+    printf("|-------|---------|------|----------|-------|");
+    for (int i = 0; i < num_sizes; i++) {
+        printf("--------|");
     }
+    printf("\n");
     
-    // Get page size
-    long page_size = sysconf(_SC_PAGESIZE);
-    int page_size_kb = page_size / 1024;
+    // Print column headers row
+    printf("| Ranks | Cores   | NUMA | Address  | NUMA  |");
     
-    // Print data for each process in order
-    snprintf(line, sizeof(line), "|  %03d  | %-7s |   %-2d | %-14p | %-12zu |   %-2s  | kB=%-8d | %-10.2f |\n",
-             rank, cpu_list, core_numa, addr, size, numa_maps_info, page_size_kb, latency_ns);
+    // Print each size as a column header with fixed width, including MB unit
+    for (int i = 0; i < num_sizes; i++) {
+        // Format size with MB unit - always use MB
+        char size_text[10];
+        snprintf(size_text, sizeof(size_text), "%zuMB", sizes[i]);
+        printf(" %-7s|", size_text);
+    }
+    printf("\n");
     
-    // Print the line and flush
-    printf("%s", line);
+    // Print second separator line
+    printf("|-------|---------|------|----------|-------|");
+    for (int i = 0; i < num_sizes; i++) {
+        printf("--------|");
+    }
+    printf("\n");
+    
     fflush(stdout);
-    MPI_Barrier(MPI_COMM_WORLD);
+}
+
+static void print_results_table_row(int rank, int size, int cpu_id, int core_numa, void *addr, int num_sizes, double *latencies) {
+    // Suppress unused parameter warning
+    (void)cpu_id;
+    
+    // Use strict ordering to print ranks sequentially
+    for (int r = 0; r < size; r++) {
+        if (rank == r) {
+            char cpu_list[256] = "N/A";
+            
+            // Get CPU affinity information using hwloc
+            hwloc_topology_t topology;
+            hwloc_topology_init(&topology);
+            hwloc_topology_set_flags(topology, HWLOC_TOPOLOGY_FLAG_WHOLE_SYSTEM);
+            hwloc_topology_load(topology);
+            
+            hwloc_cpuset_t cpuset = hwloc_bitmap_alloc();
+            if (hwloc_get_cpubind(topology, cpuset, 0) == 0) {
+                int first = -1;
+                int last = -1;
+                int count = 0;
+                
+                // Get the first and last CPU in the set
+                first = hwloc_bitmap_first(cpuset);
+                last = hwloc_bitmap_last(cpuset);
+                count = hwloc_bitmap_weight(cpuset);
+                
+                if (count > 0) {
+                    // For hyperthreading, we expect exactly 2 cores (physical + hyperthread)
+                    if (count == 2) {
+                        snprintf(cpu_list, sizeof(cpu_list), "%d,%d", first, last);
+                    } else {
+                        // Fallback to showing just the current CPU
+                        snprintf(cpu_list, sizeof(cpu_list), "%d", first);
+                    }
+                }
+            }
+            
+            hwloc_bitmap_free(cpuset);
+            hwloc_topology_destroy(topology);
+            
+            // Get NUMA maps information
+            char numa_maps_info[256] = "N/A";
+            int node = get_numa_node_of_address(addr);
+            if (node >= 0) {
+                snprintf(numa_maps_info, sizeof(numa_maps_info), "%d", node);
+            }
+            
+            // Print fixed part of the row
+            printf("|  %03d  | %-7s |   %-2d | %-8p |   %-2s  |", 
+                   rank, cpu_list, core_numa, addr, numa_maps_info);
+            
+            // Print each latency measurement with fixed width formatting (7 chars for value)
+            for (int i = 0; i < num_sizes; i++) {
+                printf(" %-6.2f |", latencies[i]);
+            }
+            
+            printf("\n");
+            fflush(stdout);
+        }
+        
+        // Synchronize after each rank prints
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+}
+
+static void print_results_table_footer(int num_sizes) {
+    // Calculate total width based on known dimensions
+    const int column_width = 9; // Same as in header
+    int latency_section_width = num_sizes * column_width + 1;
+    int fixed_section_width = 40; // Width of MPI+CPU+MEMORY sections (reduced by 6)
+    int total_width = fixed_section_width + latency_section_width;
+    
+    // Print bottom line with correct width
+    printf(" ");
+    for (int i = 0; i < total_width; i++) {
+        printf("=");
+    }
+    printf("\n");
+    fflush(stdout);
 } 
