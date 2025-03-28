@@ -27,6 +27,9 @@ srun -t "00:60:00" --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57
 - **Socket(s)**: 1
 - **NUMA node(s)**: 4
 
+### AMD EPYC Architecture Overview
+AMD EPYC processors use a multi-chiplet design where each NUMA domain contains multiple CCDs (Core Complex Dies), each with its own L3 cache and memory access paths. These CCDs are further divided into CCXs (Core CompleXes), creating a hierarchical topology that can significantly impact memory access patterns and latencies depending on which specific core is accessing memory.
+
 ### NUMA Node CPU Distribution
 - **NUMA node0**: CPUs 0-15,64-79
 - **NUMA node1**: CPUs 16-31,80-95
@@ -65,11 +68,9 @@ Here's the output from the concurrent execution mode:
  ========================================================================================================================================================================================
 ```
 
-### Visual Results
+### Analysis of Concurrent Mode Results
 
 ![Concurrent Mode Latency](./results/images/lumig_local_concurrent.png)
-
-### Analysis of Concurrent Mode Results
 
 The test measured memory latency across 15 different allocation sizes, from 1MB to 16384MB. Several clear patterns emerge:
 
@@ -104,6 +105,27 @@ For example, at 4096MB:
 
 This suggests that even within the same NUMA domain, physical core placement may impact memory access patterns, possibly due to the internal topology of the CCDs (Core Complex Dies) in the EPYC architecture.
 
+#### Pattern Inversion at Extreme Allocation Size
+
+A striking anomaly occurs at the largest tested allocation size (16384MB), where the otherwise consistent pattern between even and odd ranks inverts for NUMA domain 0:
+
+- At 16384MB:
+  - Rank 0: 130.76ns vs Rank 1: 156.56ns (pattern reversal)
+  - Rank 2: 155.69ns vs Rank 3: 130.77ns (similar to usual pattern)
+  - Rank 4: 156.06ns vs Rank 5: 129.24ns (similar to usual pattern)
+  - Rank 6: 156.71ns vs Rank 7: 129.43ns (similar to usual pattern)
+
+This unexpected crossover, where Rank 0 suddenly performs better than Rank 1 (by about 20%), suggests that at extreme memory sizes, the memory subsystem behavior changes significantly. Possible explanations include:
+
+**Potential causes for the anomaly:**
+* **Memory controller reallocation:** The system may dynamically reassign memory controller resources at capacity limits
+* **Page table management:** Different strategies for handling very large memory regions may be employed
+* **NUMA domain 0 special case:** As the boot CPU domain, node 0 may have special handling for extreme allocations
+* **Routing topology changes:** Memory controller saturation may trigger different traffic routing decisions
+* **Memory interleaving effects:** Large allocations may cross memory channel boundaries differently
+
+This anomaly highlights that memory subsystem behavior is not entirely predictable and can change dramatically at extreme allocation sizes, which has important implications for applications that manage very large memory regions.
+
 ## Serial Mode Results
 
 ### Raw Results Table
@@ -127,11 +149,9 @@ Here's the output from the serial execution mode:
  ========================================================================================================================================================================================
 ```
 
-### Visual Results
+### Analysis of Serial Mode Results
 
 ![Serial Mode Latency](./results/images/lumig_local_serial.png)
-
-### Analysis of Serial Mode Results
 
 The serial mode test shows several notable differences from the concurrent mode:
 
