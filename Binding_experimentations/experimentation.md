@@ -92,25 +92,13 @@ Here's the output from the concurrent execution mode:
 
 The test measured memory latency across 15 different allocation sizes, from 1MB to 16384MB. Several clear patterns emerge:
 
-1. **Small Allocations (1-16MB)**:
-   - Consistently low latencies across all NUMA domains (11-19ns)
-   - These sizes fit within a single CCD's L3 cache (32MB per CCD)
-   - Very little variation between NUMA domains at these sizes
-   - L1 (32KB) and L2 (512KB) cache effects are not clearly visible at the tested size granularity, as all tested sizes exceeded L2 capacity
+1. **Small Allocations (1-16MB)**: Very little variation between NUMA domains at these size. L1 (32KB) and L2 (512KB) cache effects are not clearly visible at the tested size granularity, as all tested sizes exceeded L2 capacity
 
-2. **Medium Allocations (32-64MB)**:
-   - Sharp increase in latency (35-78ns) at 32MB
-   - 32MB represents the size of a single L3 cache in a CCD
-   - The jump at 32MB (from ~18ns to ~36ns) occurs when data exceeds a single L3 cache but might still fit in the two L3 caches (64MB total) within a NUMA node
-   - 64MB shows the second significant jump (from ~36ns to ~68-78ns) when data exceeds the combined L3 capacity of a NUMA node, requiring full DRAM access
+2. **Medium Allocations (32-64MB)**:32MB represents the size of a single L3 cache in a CCD. The jump at 32MB (from ~18ns to ~36ns) occurs when data exceeds a single L3 cache but might still fit in the two L3 caches (64MB total) within a NUMA node. 64MB shows the second significant jump (from ~36ns to ~68-78ns) when data exceeds the combined L3 capacity of a NUMA node, requiring full DRAM access
 
-3. **Large Allocations (128MB-16384MB)**:
-   - Further increases in latency, with more variation between runs
-   - Most cores show a pattern of increasing latency as size grows beyond 512MB
-   - Some domains (particularly even-numbered ranks) show significantly higher latencies for the largest allocations
-   - At these sizes, the system is fully dependent on DRAM access patterns and memory controller behavior
+3. **Large Allocations (128MB-16384MB)**: Some domains (particularly even-numbered ranks) show significantly higher latencies for the largest allocation. At these sizes, the system is fully dependent on DRAM access patterns and memory controller behavior
 
-#### Latency Patterns Within NUMA Domains (Concurrent Mode)
+### Latency Patterns Within NUMA Domains (Concurrent Mode)
 
 An interesting pattern emerges when comparing pairs of ranks within the same NUMA domain:
 
@@ -125,7 +113,7 @@ For example, at 4096MB:
 
 This pattern can be explained by the internal CCD topology of the EPYC processor. Since each NUMA node has two CCDs, it's likely that even-numbered ranks and odd-numbered ranks are being scheduled on different CCDs within the same NUMA node. The data suggests that under concurrent load, cores in one CCD experience significantly higher memory access latencies than cores in the other CCD, despite both being in the same NUMA domain.
 
-#### Pattern Inversion at Extreme Allocation Size
+### Pattern Inversion at Extreme Allocation Size
 
 A striking anomaly occurs at the largest tested allocation size (16384MB), where the otherwise consistent pattern between even and odd ranks inverts for NUMA domain 0:
 
@@ -176,23 +164,10 @@ Here's the output from the serial execution mode:
 
 The serial mode test shows several notable differences from the concurrent mode while still exhibiting similar cache-related thresholds:
 
-1. **Small Allocations (1-16MB)**:
-   - Similar to concurrent mode, latencies remain low and consistent
-   - Slightly faster response times observed in serial mode (10-19ns vs 11-19ns)
-   - These sizes still fit within a single L3 cache (32MB)
-   - The cache effects remain dominant at these allocation sizes
+1. **Small Allocations (1-16MB)**: Similar to concurrent mode, latencies remain low and consisten. These sizes still fit within a single L3 cache (32MB)
+2. **Medium Allocations (32-64MB)**: Similar latency jumps at the cache boundaries. 32MB jump similar to concurrent mode (~18ns to ~35ns) as data exceeds a single L3 cache. Less variability between ranks compared to concurrent mode
 
-2. **Medium Allocations (32-64MB)**:
-   - Similar latency jumps at the cache boundaries
-   - 32MB jump similar to concurrent mode (~18ns to ~35ns) as data exceeds a single L3 cache
-   - 64MB shows a consistent jump across all ranks (~35ns to ~67ns) as data exceeds the combined L3 capacity of both CCDs in a NUMA node
-   - Less variability between ranks compared to concurrent mode
-
-3. **Large Allocations (128MB-16384MB)**:
-   - **Key Difference**: In serial mode, all ranks show remarkably consistent latencies
-   - No significant difference between even and odd-numbered ranks
-   - Latency values stabilize between 110-130ns for large allocations
-   - Overall lower latencies compared to concurrent mode for the same allocation sizes
+3. **Large Allocations (128MB-16384MB)**: **Key Difference**: In serial mode, all ranks show remarkably consistent latencies. No significant difference between even and odd-numbered ranks.
 
 #### Latency Patterns Within NUMA Domains (Serial Mode)
 
