@@ -270,6 +270,7 @@ static double measure_memory_latency(void *memory, size_t size) {
 
 static int parse_args(int argc, char *argv[], int *serial_mode) {
     *serial_mode = 0;
+    int size = DEFAULT_ALLOC_SIZE_MB;
     
     // Handle command line arguments
     for (int i = 1; i < argc; i++) {
@@ -278,14 +279,25 @@ static int parse_args(int argc, char *argv[], int *serial_mode) {
             continue;
         }
         
-        // Handle size parameter (first non-option argument)
-        char *endptr;
-        long size = strtol(argv[i], &endptr, 10);
-        if (*endptr == '\0' && size > 0) {
-            return (int)size;
+        // Check for --size option
+        if (strncmp(argv[i], "--size=", 7) == 0) {
+            char *size_str = argv[i] + 7;
+            char *endptr;
+            long parsed_size = strtol(size_str, &endptr, 10);
+            if (*endptr == '\0' && parsed_size > 0) {
+                size = (int)parsed_size;
+            } else {
+                fprintf(stderr, "Warning: Invalid size value '%s', using default %d MB\n", 
+                        size_str, DEFAULT_ALLOC_SIZE_MB);
+            }
+            continue;
         }
+        
+        // Unrecognized option
+        fprintf(stderr, "Warning: Unrecognized option '%s'\n", argv[i]);
     }
-    return DEFAULT_ALLOC_SIZE_MB;
+    
+    return size;
 }
 
 static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa) {
