@@ -1,0 +1,72 @@
+✗ srun -t "00:60:00" --nodes 1 --ntasks 8  --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  --hint=nomultithread ./run_numa.sh --numa=0,0,1,1,2,2,3,3 --verbose -- --size=1-16384 --serial
+
+srun: job 10071865 queued and waiting for resources
+srun: job 10071865 has been allocated resources
+[Rank 0] Binding to NUMA domain 0
+[Rank 0] Executing: numactl --membind=0 ./numa_bench --size=1-16384 --serial
+[Rank 1] Binding to NUMA domain 0
+[Rank 1] Executing: numactl --membind=0 ./numa_bench --size=1-16384 --serial
+[Rank 3] Binding to NUMA domain 1
+[Rank 3] Executing: numactl --membind=1 ./numa_bench --size=1-16384 --serial
+[Rank 6] Binding to NUMA domain 3
+[Rank 6] Executing: numactl --membind=3 ./numa_bench --size=1-16384 --serial
+[Rank 2] Binding to NUMA domain 1
+[Rank 2] Executing: numactl --membind=1 ./numa_bench --size=1-16384 --serial
+[Rank 4] Binding to NUMA domain 2
+[Rank 4] Executing: numactl --membind=2 ./numa_bench --size=1-16384 --serial
+[Rank 5] Binding to NUMA domain 2
+[Rank 5] Executing: numactl --membind=2 ./numa_bench --size=1-16384 --serial
+[Rank 7] Binding to NUMA domain 3
+[Rank 7] Executing: numactl --membind=3 ./numa_bench --size=1-16384 --serial
+
+=== Debug Information ===
+MPI Configuration:
+  Number of ranks: 8
+  Command line arguments:
+    argv[0] = ./numa_bench
+    argv[1] = --size=1-16384
+    argv[2] = --serial
+
+System Information:
+  Page size: 4096 bytes
+  Number of NUMA nodes: 4
+  NUMA available: Yes
+  Number of CPUs: 128
+  Current CPU: 1
+  Current NUMA node: 0
+
+Note: NUMA memory binding should be controlled externally using numactl --membind=<node>
+=====================
+
+
+ ========================================================================================================================================================================================
+|  MPI  |        CPU     |              MEMORY    |                                                             LATENCY (ns)                                                             |
+|-------|---------|------|----------------|-------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|
+| Ranks | Cores   | NUMA |     Address    | NUMA  | 1MB    | 2MB    | 4MB    | 8MB    | 16MB   | 32MB   | 64MB   | 128MB  | 256MB  | 512MB  | 1024MB | 2048MB | 4096MB | 8192MB | 16384MB|
+|-------|---------|------|----------------|-------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|
+|  000  | 1       |   0  | 0x527d60       |   0   | 10.49  | 12.92  | 14.26  | 14.98  | 18.70  | 36.17  | 68.53  | 86.12  | 97.13  | 100.92 | 105.18 | 108.98 | 110.84 | 112.50 | 133.20 |
+|  001  | 9       |   0  | 0x526920       |   0   | 10.34  | 12.96  | 14.88  | 14.97  | 18.61  | 37.13  | 67.68  | 86.22  | 95.40  | 101.65 | 104.00 | 107.44 | 111.18 | 116.96 | 131.50 |
+|  002  | 17      |   1  | 0x526940       |   1   | 10.36  | 12.90  | 14.23  | 14.95  | 18.40  | 35.49  | 66.15  | 84.91  | 94.41  | 99.44  | 103.25 | 106.07 | 109.63 | 111.75 | 128.44 |
+|  003  | 25      |   1  | 0x526940       |   1   | 10.35  | 12.95  | 14.03  | 14.84  | 18.07  | 34.95  | 67.61  | 85.99  | 95.46  | 100.30 | 103.69 | 107.13 | 110.43 | 112.44 | 130.34 |
+|  004  | 33      |   2  | 0x5269b0       |   2   | 11.76  | 12.94  | 14.24  | 14.94  | 21.20  | 35.55  | 67.57  | 85.06  | 95.22  | 100.28 | 104.15 | 110.96 | 112.34 | 112.42 | 130.33 |
+|  005  | 41      |   2  | 0x526980       |   2   | 10.36  | 12.94  | 14.25  | 14.94  | 18.63  | 36.10  | 66.53  | 84.89  | 94.89  | 101.28 | 104.24 | 106.83 | 110.24 | 112.64 | 129.83 |
+|  006  | 49      |   3  | 0x5269e0       |   3   | 10.36  | 12.95  | 14.29  | 14.93  | 18.53  | 34.52  | 67.43  | 85.54  | 95.48  | 101.12 | 106.81 | 107.32 | 111.13 | 113.05 | 129.72 |
+|  007  | 57      |   3  | 0x5269a0       |   3   | 10.32  | 14.00  | 14.22  | 15.00  | 19.66  | 35.90  | 67.78  | 85.91  | 95.96  | 102.04 | 104.53 | 108.81 | 111.44 | 113.30 | 130.60 |
+ ========================================================================================================================================================================================
+[7] 
+[7] Per-node process memory usage (in MBs) for PID 57724 (numa_bench)
+[7]                            Node 0          Node 1          Node 2          Node 3           Total
+[7]                   --------------- --------------- --------------- --------------- ---------------
+[7] Huge                         0.00            0.00            0.00            0.00            0.00
+[7] Heap                         0.00            0.00            0.00        16386.97        16386.97
+[7] Stack                        0.00            0.00            0.00            0.02            0.02
+[7] Private                      7.95            1.99            2.36            3.48           15.78
+[7] ----------------  --------------- --------------- --------------- --------------- ---------------
+[7] Total                        7.95            1.99            2.36        16390.46        16402.77
+
+=== NUMA Statistics for Last Process (Rank 7) ===
+Process ID: 57724
+Allocated Memory Size: 16384 MB
+
+Running numastat...
+==============================================
