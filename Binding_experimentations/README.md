@@ -39,18 +39,44 @@ make
 
 Basic usage:
 ```bash
-srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57 --hint=nomultithread ./numa_bench <size_in_mb>
+srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  numactl --membind=0 --hint=nomultithread ./numa_bench --size=1024
 ```
 
-With external NUMA control:
+### Command Line Options
+
+- `--size=SIZE`: Specify memory size to allocate in MB (default: 512)
+- `--serial`: Run in serial mode (one rank at a time)
+
+### Using the Wrapper Script
+
+The project includes a wrapper script `run_numa.sh` that provides additional flexibility in controlling NUMA bindings and memory allocation:
+
 ```bash
-numactl --membind=<node_number> srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57 --hint=nomultithread ./numa_bench <size_in_mb>
+# Basic usage with wrapper script
+srun --nodes=1 --ntasks=56 ./run_numa.sh --numa=3 -- --size=2048
+
+# Specify binding per rank
+srun --nodes=1 --ntasks=6 ./run_numa.sh --numa=0,1,2,3,0,1 -- --size=1024
+
+# Automatic round-robin binding with verbose output
+srun --nodes=1 --ntasks=56 ./run_numa.sh --numa=auto --verbose -- --size=2048
 ```
 
-With serial execution mode:
-```bash
-numactl --membind=<node_number> srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57 --hint=nomultithread ./numa_bench --serial <size_in_mb>
-```
+#### Wrapper Script Options
+
+- `--numa=VALUE`: Control NUMA domain binding
+  - Single value (e.g., `--numa=3`): Bind all ranks to that NUMA node
+  - Comma-separated list (e.g., `--numa=0,1,2,3`): Bind each rank according to the list
+  - `auto`: Automatically distribute ranks across all NUMA nodes (round-robin)
+  - Default: No NUMA binding
+
+- `--verbose`: Enable verbose output showing rank, NUMA node, and commands
+
+- `--serial`: Run in serial mode (one rank at a time)
+
+- `--`: Separator after which all arguments are passed directly to numa_bench
+
+Note: All numa_bench options (including `--size`) should be passed after the `--` separator.
 
 ## Memory Latency Benchmark
 

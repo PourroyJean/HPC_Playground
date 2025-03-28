@@ -1,0 +1,71 @@
+srun -t "00:60:00" --nodes 1 --ntasks 8  --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  --hint=nomultithread ./run_numa.sh --numa=0,0,1,1,2,2,3,3 --verbose -- --size=2048
+
+srun: job 10067474 queued and waiting for resources
+srun: job 10067474 has been allocated resources
+[Rank 1] Binding to NUMA domain 0
+[Rank 1] Executing: numactl --membind=0 ./numa_bench --size=2048
+[Rank 4] Binding to NUMA domain 2
+[Rank 4] Executing: numactl --membind=2 ./numa_bench --size=2048
+[Rank 5] Binding to NUMA domain 2
+[Rank 5] Executing: numactl --membind=2 ./numa_bench --size=2048
+[Rank 7] Binding to NUMA domain 3
+[Rank 7] Executing: numactl --membind=3 ./numa_bench --size=2048
+[Rank 0] Binding to NUMA domain 0
+[Rank 0] Executing: numactl --membind=0 ./numa_bench --size=2048
+[Rank 2] Binding to NUMA domain 1
+[Rank 2] Executing: numactl --membind=1 ./numa_bench --size=2048
+[Rank 3] Binding to NUMA domain 1
+[Rank 3] Executing: numactl --membind=1 ./numa_bench --size=2048
+[Rank 6] Binding to NUMA domain 3
+[Rank 6] Executing: numactl --membind=3 ./numa_bench --size=2048
+
+=== Debug Information ===
+MPI Configuration:
+  Number of ranks: 8
+  Command line arguments:
+    argv[0] = ./numa_bench
+    argv[1] = --size=2048
+
+System Information:
+  Page size: 4096 bytes
+  Number of NUMA nodes: 4
+  NUMA available: Yes
+  Number of CPUs: 128
+  Current CPU: 1
+  Current NUMA node: 0
+
+Note: NUMA memory binding should be controlled externally using numactl --membind=<node>
+=====================
+
+
+ ===========================================================================================
+|  MPI  |        CPU     |                             MEMORY                  |  LATENCY   |
+|-------|---------|------|----------------|--------------|-------|-------------|------------|
+| ranks | Cores   | NUMA |     Address    | SIZE (MB)    | NUMA  |  Page Size  | Avg (ns)   |
+|-------|---------|------|----------------|--------------|-------|-------------|------------|
+|  000  | 1       |   0  | 0x426220       | 2048         |   0   | kB=4        | 164.00     |
+|  001  | 9       |   0  | 0x424f80       | 2048         |   0   | kB=4        | 111.12     |
+|  002  | 17      |   1  | 0x424fc0       | 2048         |   1   | kB=4        | 165.57     |
+|  003  | 25      |   1  | 0x424fc0       | 2048         |   1   | kB=4        | 111.86     |
+|  004  | 33      |   2  | 0x425000       | 2048         |   2   | kB=4        | 158.21     |
+|  005  | 41      |   2  | 0x425000       | 2048         |   2   | kB=4        | 111.57     |
+|  006  | 49      |   3  | 0x425040       | 2048         |   3   | kB=4        | 168.10     |
+|  007  | 57      |   3  | 0x425040       | 2048         |   3   | kB=4        | 112.36     |
+[7] 
+[7] Per-node process memory usage (in MBs) for PID 111726 (numa_bench)
+[7]                            Node 0          Node 1          Node 2          Node 3           Total
+[7]                   --------------- --------------- --------------- --------------- ---------------
+[7] Huge                         0.00            0.00            0.00            0.00            0.00
+[7] Heap                         0.00            0.00            0.00         2050.13         2050.13
+[7] Stack                        0.00            0.00            0.00            0.02            0.02
+[7] Private                      2.45            2.46            1.49            9.12           15.52
+[7] ----------------  --------------- --------------- --------------- --------------- ---------------
+[7] Total                        2.45            2.46            1.49         2059.27         2065.67
+ ===========================================================================================
+
+=== NUMA Statistics for Last Process (Rank 7) ===
+Process ID: 111726
+Allocated Memory Size: 2048 MB
+
+Running numastat...
+==============================================
