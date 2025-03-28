@@ -67,7 +67,7 @@ Here's the output from the concurrent execution mode:
 
 ### Visual Results
 
-![Concurrent Mode Latency](images/lumig_local_concurrent.png)
+![Concurrent Mode Latency](./results/images/lumig_local_concurrent.png)
 
 ### Analysis of Concurrent Mode Results
 
@@ -129,7 +129,7 @@ Here's the output from the serial execution mode:
 
 ### Visual Results
 
-![Serial Mode Latency](images/lumig_local_serial.png)
+![Serial Mode Latency](./results/images/lumig_local_serial.png)
 
 ### Analysis of Serial Mode Results
 
