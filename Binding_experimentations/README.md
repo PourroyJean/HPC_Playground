@@ -12,14 +12,23 @@ This project provides an MPI-based benchmark tool designed to measure memory lat
 
 - Detailed Reporting: Provides clear, tabular output of latency measurements per MPI rank, alongside detailed system diagnostics.
 
+- Multi-Size Testing: Supports testing multiple allocation sizes in a single run with automatic size progression.
+
 ## How It Works
 
 - Each MPI rank allocates a specified amount of memory and initializes it as a randomly ordered linked list of pointers.
 
 - The benchmark then measures the average time required to traverse this list, accurately reflecting the real memory latency experienced by the CPU.
 
+## Documentation
 
+Detailed analysis of benchmark results is available in the [experimentation.md](experimentation.md) file, which includes:
 
+- Comprehensive analysis of latency patterns across different memory sizes
+- Comparison between concurrent and serial execution modes
+- Correlation with CPU cache hierarchy and NUMA topology
+- Visualizations of memory access latency
+- Insights into AMD EPYC architecture performance characteristics
 
 ## Requirements
 
@@ -45,6 +54,7 @@ srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  numactl --me
 ### Command Line Options
 
 - `--size=SIZE`: Specify memory size to allocate in MB (default: 512)
+- `--size=MIN-MAX`: Test multiple memory sizes from MIN to MAX MB
 - `--serial`: Run in serial mode (one rank at a time)
 
 ### Using the Wrapper Script
@@ -60,6 +70,9 @@ srun --nodes=1 --ntasks=6 ./run_numa.sh --numa=0,1,2,3,0,1 -- --size=1024
 
 # Automatic round-robin binding with verbose output
 srun --nodes=1 --ntasks=56 ./run_numa.sh --numa=auto --verbose -- --size=2048
+
+# Test multiple memory sizes from 1MB to 16GB
+srun --nodes=1 --ntasks=8 ./run_numa.sh --numa=0,0,1,1,2,2,3,3 --verbose -- --size=1-16384
 ```
 
 #### Wrapper Script Options
@@ -91,6 +104,7 @@ The benchmark helps identify:
 - Local vs. remote NUMA memory access latencies
 - Impact of NUMA node binding on memory performance
 - Memory access patterns and their effect on performance
+- Cache effects across different allocation sizes
 
 ### Benchmark Configuration
 
@@ -122,22 +136,36 @@ The tool provides detailed information about:
 2. CPU affinity for each process
 3. NUMA node assignments
 4. Memory allocation details
-5. Memory latency measurements
+5. Memory latency measurements across multiple allocation sizes
 6. NUMA statistics for the last process
 
-Example output on an AMD EPYC 7A53 64-Core Processor:
+Example output on an AMD EPYC 7A53 64-Core Processor with memory size range testing:
 ```
-srun --nodes 1 --ntasks 8  --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  --hint=nomultithread numactl -
--membind=3 ./numa_allocator --serial 2048
+srun -t "00:60:00" --nodes 1 --ntasks 8  --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  --hint=nomultithread ./run_numa.sh --numa=0,0,1,1,2,2,3,3 --verbose -- --size=1-16384
 
+[Rank 0] Binding to NUMA domain 0
+[Rank 0] Executing: numactl --membind=0 ./numa_bench --size=1-16384
+[Rank 5] Binding to NUMA domain 2
+[Rank 5] Executing: numactl --membind=2 ./numa_bench --size=1-16384
+[Rank 7] Binding to NUMA domain 3
+[Rank 7] Executing: numactl --membind=3 ./numa_bench --size=1-16384
+[Rank 2] Binding to NUMA domain 1
+[Rank 2] Executing: numactl --membind=1 ./numa_bench --size=1-16384
+[Rank 4] Binding to NUMA domain 2
+[Rank 4] Executing: numactl --membind=2 ./numa_bench --size=1-16384
+[Rank 6] Binding to NUMA domain 3
+[Rank 6] Executing: numactl --membind=3 ./numa_bench --size=1-16384
+[Rank 1] Binding to NUMA domain 0
+[Rank 1] Executing: numactl --membind=0 ./numa_bench --size=1-16384
+[Rank 3] Binding to NUMA domain 1
+[Rank 3] Executing: numactl --membind=1 ./numa_bench --size=1-16384
 
 === Debug Information ===
 MPI Configuration:
   Number of ranks: 8
   Command line arguments:
     argv[0] = ./numa_bench
-    argv[1] = --serial
-    argv[2] = 2048
+    argv[1] = --size=1-16384
 
 System Information:
   Page size: 4096 bytes
@@ -147,51 +175,59 @@ System Information:
   Current CPU: 1
   Current NUMA node: 0
 
-===========================================================================================
-|  MPI  |        CPU     |                             MEMORY                  |  LATENCY   |
-|-------|---------|------|----------------|--------------|-------|-------------|------------|
-| ranks | Cores   | NUMA |     Address    | SIZE (MB)    | NUMA  |  Page Size  | Avg (ns)   |
-|-------|---------|------|----------------|--------------|-------|-------------|------------|
-|  000  | 1       |   0  | 0x425620       | 2048         |   3   | kB=4        | 124.65     |
-|  001  | 9       |   0  | 0x424f80       | 2048         |   3   | kB=4        | 124.76     |
-|  002  | 17      |   1  | 0x424fc0       | 2048         |   3   | kB=4        | 120.75     |
-|  003  | 25      |   1  | 0x424fc0       | 2048         |   3   | kB=4        | 123.03     |
-|  004  | 33      |   2  | 0x425000       | 2048         |   3   | kB=4        | 116.44     |
-|  005  | 41      |   2  | 0x425000       | 2048         |   3   | kB=4        | 114.53     |
-|  006  | 49      |   3  | 0x425040       | 2048         |   3   | kB=4        | 108.24     |
-|  007  | 57      |   3  | 0x425040       | 2048         |   3   | kB=4        | 107.13     |
+Note: NUMA memory binding should be controlled externally using numactl --membind=<node>
+=====================
 
-Per-node process memory usage (in MBs) for PID 17959 (numa_bench)
+
+ ========================================================================================================================================================================================
+|  MPI  |        CPU     |              MEMORY    |                                                             LATENCY (ns)                                                             |
+|-------|---------|------|----------------|-------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|
+| Ranks | Cores   | NUMA |     Address    | NUMA  | 1MB    | 2MB    | 4MB    | 8MB    | 16MB   | 32MB   | 64MB   | 128MB  | 256MB  | 512MB  | 1024M  | 2048M  | 4096M  | 8192M  | 16384M |
+|-------|---------|------|----------------|-------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|
+|  000  | 1       |   0  | 0x527e70       |   0   | 11.53  | 12.92  | 14.25  | 14.93  | 18.67  | 37.73  | 72.45  | 108.77 | 105.56 | 114.71 | 154.92 | 164.07 | 178.93 | 171.25 | 130.76 |
+|  001  | 9       |   0  | 0x526920       |   0   | 11.43  | 12.93  | 14.26  | 14.94  | 18.59  | 37.00  | 68.22  | 87.39  | 98.07  | 103.95 | 104.90 | 110.13 | 112.31 | 116.69 | 156.56 |
+|  002  | 17      |   1  | 0x526960       |   1   | 11.48  | 12.93  | 14.24  | 14.96  | 18.60  | 37.64  | 68.62  | 108.25 | 98.41  | 120.04 | 149.20 | 162.67 | 183.60 | 164.67 | 155.69 |
+|  003  | 25      |   1  | 0x526940       |   1   | 11.16  | 12.99  | 14.23  | 14.93  | 18.72  | 37.32  | 68.17  | 87.64  | 102.25 | 103.49 | 104.50 | 109.08 | 111.92 | 117.30 | 130.77 |
+|  004  | 33      |   2  | 0x5269d0       |   2   | 11.47  | 12.93  | 14.21  | 14.93  | 18.51  | 36.19  | 75.32  | 85.91  | 122.77 | 120.02 | 147.15 | 164.27 | 180.87 | 170.07 | 156.06 |
+|  005  | 41      |   2  | 0x526960       |   2   | 11.06  | 12.93  | 14.28  | 14.92  | 18.73  | 35.80  | 68.15  | 104.83 | 97.64  | 102.93 | 104.26 | 110.72 | 111.84 | 115.56 | 129.24 |
+|  006  | 49      |   3  | 0x5269c0       |   3   | 11.47  | 12.95  | 14.25  | 14.96  | 18.62  | 36.97  | 78.35  | 86.35  | 108.96 | 109.47 | 153.43 | 164.00 | 170.84 | 163.13 | 156.71 |
+|  007  | 57      |   3  | 0x5269c0       |   3   | 11.19  | 12.95  | 14.24  | 14.94  | 18.69  | 35.51  | 67.74  | 92.91  | 98.20  | 102.17 | 103.98 | 109.08 | 112.20 | 116.15 | 129.43 |
+ ========================================================================================================================================================================================
+
+Per-node process memory usage (in MBs) for PID 60919 (numa_bench)
                            Node 0          Node 1          Node 2          Node 3           Total
                   --------------- --------------- --------------- --------------- ---------------
 Huge                         0.00            0.00            0.00            0.00            0.00
-Heap                         0.00            0.00            0.00         2050.13         2050.13
+Heap                         0.00            0.00            0.00        16386.97        16386.97
 Stack                        0.00            0.00            0.00            0.02            0.02
-Private                      0.51            0.00            0.00           15.20           15.70
+Private                      8.90            2.36            0.95            3.46           15.67
 ----------------  --------------- --------------- --------------- --------------- ---------------
-Total                        0.51            0.00            0.00         2065.35         2065.86
+Total                        8.90            2.36            0.95        16390.45        16402.66
 ```
 
 ### Analysis of Results
 
 The example shows several important characteristics:
 
-1. **NUMA Node Distribution**:
-   - The system has 4 NUMA nodes
-   - Each NUMA node has 2 CCDs (Core Complex Dies)
-   - Memory is bound to NUMA node 3 using `numactl --membind=3`
-   - Tasks are mapped to one CPU per CCD (1,9,17,25,33,41,49,57)
+1. **Memory Size Scaling**:
+   - The benchmark tests memory sizes from 1MB to 16384MB (16GB)
+   - Clear latency patterns emerge at different memory size thresholds
+   - Cache effects are visible at sizes under 32MB (~10-19ns latency)
+   - DRAM access dominates at larger sizes (>64MB, ~65-180ns latency)
 
-2. **Memory Latency Pattern**:
-   - Local access (NUMA node 3): ~107-108 ns
-   - Remote access (NUMA node 2): ~114-116 ns
-   - Remote access (NUMA node 1): ~120-124 ns
-   - Remote access (NUMA node 0): ~124-125 ns
-   - Shows clear NUMA locality impact on memory access latency
+2. **NUMA Node Distribution**:
+   - Each NUMA node has two ranks bound to it (0/1 to node 0, 2/3 to node 1, etc.)
+   - All memory for a given rank is properly bound to its assigned NUMA node
 
-3. **Memory Allocation**:
-   - Total memory allocated: 2048 MB per rank
-   - Memory is successfully bound to NUMA node 3
+3. **Latency Pattern Analysis**:
+   - Interesting pattern between even and odd-numbered ranks within NUMA domains
+   - Even-numbered ranks (0,2,4,6) show higher latencies for large allocations
+   - Odd-numbered ranks (1,3,5,7) maintain more consistent latencies
+   - Full analysis of these patterns available in [experimentation.md](experimentation.md)
+
+4. **Memory Allocation**:
+   - Total memory allocated scales up to 16GB per rank
+   - Memory is successfully bound to designated NUMA nodes
    - Small amounts of memory are allocated on other nodes for system overhead
 
 ## Notes
@@ -202,6 +238,7 @@ The example shows several important characteristics:
 - CPU affinity information is obtained using hwloc
 - The memory latency benchmark uses pointer chasing to measure actual memory access times
 - Latency measurements help identify NUMA-related performance impacts
+- Analysis of results with cache hierarchy correlation available in experimentation.md
 
 ## Future Enhancements
 
@@ -212,19 +249,20 @@ The following features are planned for future development:
   - [ ] Implement different access patterns (sequential, random, strided)
   - [ ] Support for both read and write bandwidth tests
 
-- [ ] Multi-Size Memory Testing
-  - [ ] Support for testing multiple allocation sizes in a single run
-  - [ ] Automatic size progression (e.g., 1MB to 1GB)
-  - [ ] Comparison of latency/bandwidth across different sizes
-  - [ ] Detection of memory size thresholds affecting performance
+- [x] Multi-Size Memory Testing
+  - [x] Support for testing multiple allocation sizes in a single run
+  - [x] Automatic size progression (e.g., 1MB to 16GB)
+  - [x] Comparison of latency across different sizes
+  - [x] Detection of memory size thresholds affecting performance
 
 - [ ] Enhanced Visualization and Reporting
   - [ ] Export results in CSV/JSON format for external analysis
-  - [ ] Support for comparing multiple test runs
+  - [x] Support for comparing multiple test runs
+  - [x] Analysis of results with cache hierarchy correlation
 
-- [ ] Per-Task NUMA Domain Assignment
-  - [ ] Allow specifying different NUMA domains for each MPI task
-  - [ ] Support for NUMA domain mapping via command line arguments
-  - [ ] Enable testing of cross-NUMA node memory access patterns
-  - [ ] Provide flexibility in memory placement strategies
+- [x] Per-Task NUMA Domain Assignment
+  - [x] Allow specifying different NUMA domains for each MPI task
+  - [x] Support for NUMA domain mapping via command line arguments
+  - [x] Enable testing of cross-NUMA node memory access patterns
+  - [x] Provide flexibility in memory placement strategies
 
