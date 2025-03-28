@@ -27,8 +27,26 @@ srun -t "00:60:00" --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57
 - **Socket(s)**: 1
 - **NUMA node(s)**: 4
 
+### Cache Hierarchy
+```
+Caches (sum of all):     
+  L1d:                   2 MiB (64 instances)
+  L1i:                   2 MiB (64 instances)
+  L2:                    32 MiB (64 instances)
+  L3:                    256 MiB (8 instances)
+```
+
+- **L1 Cache**: Each core has dedicated 32KB L1 data and 32KB L1 instruction caches
+- **L2 Cache**: Each core has a dedicated 512KB L2 cache
+- **L3 Cache**: 8 instances of 32MB L3 cache (one per CCD), shared among cores within each CCD
+- **Cache Distribution**: 2 CCDs (Core Complex Dies) per NUMA node, each with a 32MB L3 cache
+
 ### AMD EPYC Architecture Overview
+![AMD EPYC Architecture](./results/images/lumig.png)
+
 AMD EPYC processors use a multi-chiplet design where each NUMA domain contains multiple CCDs (Core Complex Dies), each with its own L3 cache and memory access paths. These CCDs are further divided into CCXs (Core CompleXes), creating a hierarchical topology that can significantly impact memory access patterns and latencies depending on which specific core is accessing memory.
+
+In the EPYC 7A53, each NUMA node contains 2 CCDs, and each CCD has its own 32MB L3 cache. This chiplet design means that even within a single NUMA domain, some cores may have different latency characteristics when accessing memory, especially if they need to communicate across CCDs.
 
 ### NUMA Node CPU Distribution
 - **NUMA node0**: CPUs 0-15,64-79
@@ -76,19 +94,21 @@ The test measured memory latency across 15 different allocation sizes, from 1MB 
 
 1. **Small Allocations (1-16MB)**:
    - Consistently low latencies across all NUMA domains (11-19ns)
-   - These sizes likely fit within the L3 cache (which is typically 32MB per CCD in EPYC 7A53)
+   - These sizes fit within a single CCD's L3 cache (32MB per CCD)
    - Very little variation between NUMA domains at these sizes
+   - L1 (32KB) and L2 (512KB) cache effects are not clearly visible at the tested size granularity, as all tested sizes exceeded L2 capacity
 
 2. **Medium Allocations (32-64MB)**:
-   - Sharp increase in latency (35-78ns)
-   - 32MB shows the first significant jump (from ~18ns to ~36ns)
-   - 64MB shows the second significant jump (from ~36ns to ~68-78ns)
-   - These sizes exceed cache capacity and require DRAM access
+   - Sharp increase in latency (35-78ns) at 32MB
+   - 32MB represents the size of a single L3 cache in a CCD
+   - The jump at 32MB (from ~18ns to ~36ns) occurs when data exceeds a single L3 cache but might still fit in the two L3 caches (64MB total) within a NUMA node
+   - 64MB shows the second significant jump (from ~36ns to ~68-78ns) when data exceeds the combined L3 capacity of a NUMA node, requiring full DRAM access
 
 3. **Large Allocations (128MB-16384MB)**:
    - Further increases in latency, with more variation between runs
    - Most cores show a pattern of increasing latency as size grows beyond 512MB
    - Some domains (particularly even-numbered ranks) show significantly higher latencies for the largest allocations
+   - At these sizes, the system is fully dependent on DRAM access patterns and memory controller behavior
 
 #### Latency Patterns Within NUMA Domains (Concurrent Mode)
 
@@ -103,7 +123,7 @@ For example, at 4096MB:
 - Rank 4: 180.87ns vs Rank 5: 111.84ns (both on NUMA domain 2)
 - Rank 6: 170.84ns vs Rank 7: 112.20ns (both on NUMA domain 3)
 
-This suggests that even within the same NUMA domain, physical core placement may impact memory access patterns, possibly due to the internal topology of the CCDs (Core Complex Dies) in the EPYC architecture.
+This pattern can be explained by the internal CCD topology of the EPYC processor. Since each NUMA node has two CCDs, it's likely that even-numbered ranks and odd-numbered ranks are being scheduled on different CCDs within the same NUMA node. The data suggests that under concurrent load, cores in one CCD experience significantly higher memory access latencies than cores in the other CCD, despite both being in the same NUMA domain.
 
 #### Pattern Inversion at Extreme Allocation Size
 
@@ -123,6 +143,7 @@ This unexpected crossover, where Rank 0 suddenly performs better than Rank 1 (by
 * **NUMA domain 0 special case:** As the boot CPU domain, node 0 may have special handling for extreme allocations
 * **Routing topology changes:** Memory controller saturation may trigger different traffic routing decisions
 * **Memory interleaving effects:** Large allocations may cross memory channel boundaries differently
+* **IO proximity effects:** NUMA node 0 may have different characteristics due to its proximity to IO devices
 
 This anomaly highlights that memory subsystem behavior is not entirely predictable and can change dramatically at extreme allocation sizes, which has important implications for applications that manage very large memory regions.
 
@@ -153,17 +174,18 @@ Here's the output from the serial execution mode:
 
 ![Serial Mode Latency](./results/images/lumig_local_serial.png)
 
-The serial mode test shows several notable differences from the concurrent mode:
+The serial mode test shows several notable differences from the concurrent mode while still exhibiting similar cache-related thresholds:
 
 1. **Small Allocations (1-16MB)**:
    - Similar to concurrent mode, latencies remain low and consistent
    - Slightly faster response times observed in serial mode (10-19ns vs 11-19ns)
+   - These sizes still fit within a single L3 cache (32MB)
    - The cache effects remain dominant at these allocation sizes
 
 2. **Medium Allocations (32-64MB)**:
    - Similar latency jumps at the cache boundaries
-   - 32MB jump similar to concurrent mode (~18ns to ~35ns)
-   - 64MB shows a consistent jump across all ranks (~35ns to ~67ns)
+   - 32MB jump similar to concurrent mode (~18ns to ~35ns) as data exceeds a single L3 cache
+   - 64MB shows a consistent jump across all ranks (~35ns to ~67ns) as data exceeds the combined L3 capacity of both CCDs in a NUMA node
    - Less variability between ranks compared to concurrent mode
 
 3. **Large Allocations (128MB-16384MB)**:
@@ -187,6 +209,8 @@ For example, at 4096MB in serial mode:
 - Rank 4: 112.34ns vs Rank 5: 110.24ns (compared to 180.87ns vs 111.84ns in concurrent mode)
 - Rank 6: 111.13ns vs Rank 7: 111.44ns (compared to 170.84ns vs 112.20ns in concurrent mode)
 
+This consistency in serial mode suggests that when memory controllers are not under concurrent pressure, the asymmetric behavior of different CCDs within the same NUMA domain disappears, leading to more uniform memory access latencies.
+
 ## Comparative Analysis: Concurrent vs. Serial Mode
 
 The stark contrast between concurrent and serial execution modes reveals significant insights about memory access patterns in NUMA systems:
@@ -200,6 +224,8 @@ The most striking difference is observed in the even-numbered ranks (0, 2, 4, 6)
 
 This strongly suggests memory controller contention when multiple processes access memory simultaneously. The EPYC 7A53's internal architecture appears to route memory access from even-numbered cores through shared pathways that experience congestion under concurrent load.
 
+When we consider the cache hierarchy (two 32MB L3 caches per NUMA node), it's likely that cores from the same CCD share memory controllers, and the CCDs containing cores 1, 17, 33, and 49 (our even-numbered ranks) may have less efficient access to memory controllers under concurrent load.
+
 ### 2. Divergence Threshold
 
 The point at which concurrent and serial results begin to diverge significantly is around 128MB:
@@ -208,7 +234,7 @@ The point at which concurrent and serial results begin to diverge significantly 
 - At and above 128MB, even-numbered ranks in concurrent mode begin showing elevated latencies
 - The divergence becomes most pronounced beyond 1024MB
 
-This indicates that memory controller saturation becomes a limiting factor primarily at larger allocation sizes, when memory bandwidth demands exceed what shared pathways can provide.
+This indicates that memory controller saturation becomes a limiting factor primarily at larger allocation sizes, when memory bandwidth demands exceed what shared pathways can provide. The system's combined L3 cache capacity (256MB across all 8 CCDs) has minimal impact at these scales, as all tested sizes beyond 256MB must be serviced primarily from DRAM.
 
 ### 3. NUMA Domain Consistency
 
@@ -218,9 +244,17 @@ Both modes show consistent behavior within each NUMA domain:
 - Similar latency progression patterns across memory sizes
 - All domains exhibit the same even/odd rank patterns in concurrent mode
 
-This confirms that the observed contention effects are related to the internal architecture of each NUMA domain rather than cross-domain interference.
+This confirms that the observed contention effects are related to the internal architecture of each NUMA domain rather than cross-domain interference. Each NUMA domain has identical cache hierarchy (two 32MB L3 caches), which explains the similar behavior across domains.
 
-### 4. Implications for System Design
+### 4. Cache-Related Thresholds
+
+The latency jumps correlate strongly with the cache hierarchy of the AMD EPYC 7A53:
+
+- **~16MB to 32MB transition**: Represents data exceeding half of a CCD's L3 cache capacity
+- **~32MB to 64MB transition**: Represents data exceeding a single CCD's L3 cache (32MB) but potentially still fitting in two CCDs' combined L3 cache (64MB) within a NUMA node
+- **Beyond 64MB**: Memory access patterns that cannot be effectively cached in the L3 caches and must rely on DRAM access
+
+### 5. Implications for System Design
 
 These results have important implications for application design on NUMA systems:
 
@@ -228,6 +262,7 @@ These results have important implications for application design on NUMA systems
 - Process placement within NUMA domains matters significantly under concurrent load
 - Even with local NUMA access, memory controller topology can create "hot spots"
 - Applications using even-numbered cores may experience higher memory latency under concurrent load
+- Memory allocation sizes should be considered in relation to cache boundaries (particularly the 32MB L3 cache size)
 
 ## NUMA Statistics Correlation
 
@@ -251,12 +286,12 @@ This confirms that the heap memory (which contains our benchmark allocation) is 
 
 This dual-mode experiment reveals important characteristics of memory access on the AMD EPYC 7A53 platform:
 
-1. **Cache effects** dominate at small allocation sizes (<32MB) in both modes
-2. **DRAM access patterns** become evident at medium and large sizes
+1. **Cache hierarchy effects** are clearly visible, with performance thresholds at 16MB, 32MB, and 64MB corresponding to L3 cache boundaries
+2. **DRAM access patterns** become evident at medium and large sizes once L3 cache capacity is exceeded
 3. **Memory controller contention** creates significant latency variations in concurrent mode, particularly for even-numbered cores
 4. **Memory latency stability** is achieved in serial mode across all cores and NUMA domains
-5. **Internal NUMA topology** has a greater impact on memory performance than previously expected
+5. **CCD topology within NUMA domains** has a significant impact on memory performance, creating asymmetric behavior under load
 
-Most importantly, these results highlight that NUMA optimization requires consideration not just of node binding but also of how cores within a NUMA domain access memory controllers. The even/odd latency pattern observed in concurrent mode suggests an asymmetric memory controller design that creates "fast" and "slow" paths under heavy load.
+Most importantly, these results highlight that NUMA optimization requires consideration not just of node binding but also of how cores within a NUMA domain access memory controllers. The even/odd latency pattern observed in concurrent mode suggests an asymmetric memory controller design that creates "fast" and "slow" paths under heavy load, likely related to the multi-chiplet design where each NUMA domain contains two separate CCDs.
 
-These findings provide valuable guidance for high-performance computing applications, suggesting that memory-intensive workloads should consider both NUMA binding and core selection for optimal performance. 
+These findings provide valuable guidance for high-performance computing applications, suggesting that memory-intensive workloads should consider both NUMA binding and core selection for optimal performance, as well as working within cache size boundaries when possible. 
