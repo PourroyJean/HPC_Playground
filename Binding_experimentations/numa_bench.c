@@ -31,15 +31,26 @@ const size_t STANDARD_SIZES[NUM_STANDARD_SIZES] = {
 #define LATENCY_ITERATIONS 100000  // Chosen for good accuracy/speed balance
 #define WARMUP_ITERATIONS 1000     // Enough to warm caches effectively   
 
+// Structure for MPI rank mapping information
+struct mapping_info {
+    int rank;
+    int cpu_id;
+    int cpu_numa;
+    int memory_numa;
+};
+
 // Function declarations
-static int parse_args(int argc, char *argv[], int *serial_mode, size_t *sizes, int *num_sizes);
+static int parse_args(int argc, char *argv[], int *serial_mode, size_t *sizes, int *num_sizes, char **csv_filename, char **mapping_file);
 static void get_cpu_info(hwloc_topology_t topology, int *cpu_id, int *core_numa);
 static int get_numa_node_of_address(void *addr);
 static void print_results_table_header(int num_sizes, size_t *sizes);
-static void print_results_table_row(int rank, int size, int cpu_id, int core_numa, void *addr, int num_sizes, double *latencies);
+static void print_results_table_row(int rank, int world_size, int cpu_id, int core_numa, void *addr, int num_sizes, double *latencies);
 static void print_results_table_footer(int num_sizes);
 static double measure_memory_latency(void *memory, size_t size);
 static void shuffle(size_t *array, size_t n);
+static int write_mapping_info(const char *filename, struct mapping_info *info, int world_size);
+static int collect_mapping_info(const char *mapping_file, int rank, int size, 
+                              int cpu_id, int core_numa, void *addr);
 
 int main(int argc, char *argv[]) {
     int rank, size;
@@ -48,8 +59,10 @@ int main(int argc, char *argv[]) {
     void *allocated_memory = NULL;
     hwloc_topology_t topology;
     int cpu_id, core_numa;
-    double *latencies;
+    double *latencies = NULL;
     int serial_mode = 0;
+    char *csv_filename = NULL;
+    char *mapping_file = NULL;
 
     // Initialize MPI
     if (MPI_Init(&argc, &argv) != MPI_SUCCESS) {
@@ -83,7 +96,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Parse command line arguments
-    if (parse_args(argc, argv, &serial_mode, sizes, &num_sizes) != 0) {
+    if (parse_args(argc, argv, &serial_mode, sizes, &num_sizes, &csv_filename, &mapping_file) != 0) {
         MPI_Abort(MPI_COMM_WORLD, 1);
         return 1;
     }
@@ -102,6 +115,26 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Rank %d: Failed to allocate latency results array\n", rank);
         MPI_Abort(MPI_COMM_WORLD, 1);
         return 1;
+    }
+
+    // Allocate memory for the first size to get NUMA information
+    allocated_memory = malloc(sizes[0] * 1024 * 1024);
+    if (allocated_memory == NULL) {
+        fprintf(stderr, "Rank %d: Memory allocation failed for size %zu MB\n", rank, sizes[0]);
+        free(latencies);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
+    }
+
+    // If mapping file is specified, collect and write mapping information
+    if (mapping_file) {
+        if (collect_mapping_info(mapping_file, rank, size, cpu_id, core_numa, allocated_memory) != 0) {
+            free(latencies);
+            free(allocated_memory);
+            hwloc_topology_destroy(topology);
+            MPI_Abort(MPI_COMM_WORLD, 1);
+            return 1;
+        }
     }
 
     // Loop through each memory size
@@ -218,6 +251,56 @@ int main(int argc, char *argv[]) {
 
     // Ensure all processes are synchronized before cleanup
     MPI_Barrier(MPI_COMM_WORLD);
+
+    // After all measurements are done, gather results to rank 0 for CSV output
+    if (csv_filename != NULL) {
+        // Allocate array to store all results in rank 0
+        double *all_latencies = NULL;
+        if (rank == 0) {
+            all_latencies = malloc(num_sizes * size * sizeof(double));
+            if (!all_latencies) {
+                fprintf(stderr, "Error: Failed to allocate memory for gathering results\n");
+                MPI_Abort(MPI_COMM_WORLD, 1);
+                return 1;
+            }
+        }
+
+        // Gather results from all ranks to rank 0
+        MPI_Gather(latencies, num_sizes, MPI_DOUBLE, all_latencies, num_sizes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+        // Write CSV file on rank 0
+        if (rank == 0) {
+            FILE *csv_file = fopen(csv_filename, "w");
+            if (!csv_file) {
+                fprintf(stderr, "Error: Failed to open CSV file %s\n", csv_filename);
+                free(all_latencies);
+                MPI_Abort(MPI_COMM_WORLD, 1);
+                return 1;
+            }
+
+            // Write header
+            fprintf(csv_file, "size (MB)");
+            for (int r = 0; r < size; r++) {
+                fprintf(csv_file, ",%d", r);
+            }
+            fprintf(csv_file, "\n");
+
+            // Write data rows
+            for (int i = 0; i < num_sizes; i++) {
+                fprintf(csv_file, "%zu", sizes[i]);
+                for (int r = 0; r < size; r++) {
+                    fprintf(csv_file, ",%.2f", all_latencies[r * num_sizes + i]);
+                }
+                fprintf(csv_file, "\n");
+            }
+
+            fclose(csv_file);
+            free(all_latencies);
+        }
+
+        // Free CSV filename
+        free(csv_filename);
+    }
 
     // Cleanup
     if (allocated_memory != NULL) {
@@ -355,15 +438,37 @@ static int add_size_if_unique(size_t *sizes, int *num_sizes, size_t size_to_add)
     return 0;
 }
 
-static int parse_args(int argc, char *argv[], int *serial_mode, size_t *sizes, int *num_sizes) {
+static int parse_args(int argc, char *argv[], int *serial_mode, size_t *sizes, int *num_sizes, char **csv_filename, char **mapping_file) {
     *serial_mode = 0;
     *num_sizes = 0;
+    *csv_filename = NULL;
+    *mapping_file = NULL;
     int size_argument_found = 0;
     
     // Handle command line arguments
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--serial") == 0) {
             *serial_mode = 1;
+            continue;
+        }
+        
+        // Check for --mapping option
+        if (strncmp(argv[i], "--mapping=", 10) == 0) {
+            *mapping_file = strdup(argv[i] + 10);
+            if (!*mapping_file) {
+                fprintf(stderr, "Error: Failed to allocate memory for mapping filename\n");
+                return -1;
+            }
+            continue;
+        }
+        
+        // Check for --csv option
+        if (strncmp(argv[i], "--csv=", 6) == 0) {
+            *csv_filename = strdup(argv[i] + 6);
+            if (!*csv_filename) {
+                fprintf(stderr, "Error: Failed to allocate memory for CSV filename\n");
+                return -1;
+            }
             continue;
         }
         
@@ -610,12 +715,12 @@ static void print_results_table_header(int num_sizes, size_t *sizes) {
     fflush(stdout);
 }
 
-static void print_results_table_row(int rank, int size, int cpu_id, int core_numa, void *addr, int num_sizes, double *latencies) {
+static void print_results_table_row(int rank, int world_size, int cpu_id, int core_numa, void *addr, int num_sizes, double *latencies) {
     // Suppress unused parameter warning
     (void)cpu_id;
     
     // Use strict ordering to print ranks sequentially
-    for (int r = 0; r < size; r++) {
+    for (int r = 0; r < world_size; r++) {
         if (rank == r) {
             char cpu_list[256] = "N/A";
             
@@ -689,4 +794,65 @@ static void print_results_table_footer(int num_sizes) {
     }
     printf("\n");
     fflush(stdout);
+}
+
+static int write_mapping_info(const char *filename, struct mapping_info *info, int world_size) {
+    FILE *f = fopen(filename, "w");
+    if (!f) {
+        fprintf(stderr, "Error: Could not open mapping file %s for writing\n", filename);
+        return -1;
+    }
+    
+    // Write CSV header
+    fprintf(f, "rank,cpu_id,cpu_numa,memory_numa\n");
+    
+    // Write each rank's info
+    for (int i = 0; i < world_size; i++) {
+        fprintf(f, "%d,%d,%d,%d\n",
+                info[i].rank,
+                info[i].cpu_id,
+                info[i].cpu_numa,
+                info[i].memory_numa);
+    }
+    
+    fclose(f);
+    return 0;
+}
+
+static int collect_mapping_info(const char *mapping_file, int rank, int size, 
+                              int cpu_id, int core_numa, void *addr) {
+    struct mapping_info my_info;
+    struct mapping_info *all_info = NULL;
+    
+    // Fill in local information
+    my_info.rank = rank;
+    my_info.cpu_id = cpu_id;
+    my_info.cpu_numa = core_numa;
+    my_info.memory_numa = get_numa_node_of_address(addr);
+    
+    // Allocate buffer on rank 0
+    if (rank == 0) {
+        all_info = malloc(size * sizeof(struct mapping_info));
+        if (!all_info) {
+            fprintf(stderr, "Error: Failed to allocate memory for mapping info\n");
+            return -1;
+        }
+    }
+    
+    // Gather all information to rank 0
+    MPI_Gather(&my_info, sizeof(struct mapping_info), MPI_BYTE,
+               all_info, sizeof(struct mapping_info), MPI_BYTE,
+               0, MPI_COMM_WORLD);
+    
+    // Rank 0 writes the mapping file
+    if (rank == 0) {
+        int ret = write_mapping_info(mapping_file, all_info, size);
+        free(all_info);
+        if (ret != 0) {
+            return -1;
+        }
+        printf("Mapping information written to %s\n", mapping_file);
+    }
+    
+    return 0;
 } 
