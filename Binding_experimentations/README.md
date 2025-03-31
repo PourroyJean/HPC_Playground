@@ -56,6 +56,36 @@ srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  numactl --me
 - `--size=SIZE`: Specify memory size to allocate in MB (default: 512)
 - `--size=MIN-MAX`: Test multiple memory sizes from MIN to MAX MB
 - `--serial`: Run in serial mode (one rank at a time)
+- `--csv=FILENAME`: Output results in CSV format to the specified file
+- `--mapping=FILENAME`: Generate a CSV file with rank mapping information
+
+The CSV output format includes:
+- First column: Memory size in MB
+- Subsequent columns: Latency measurements for each MPI rank
+- Values are formatted with 2 decimal places
+
+Example CSV output:
+```csv
+size (MB),0,1,2
+1,13.13,12.01,12.55
+2,15.91,15.76,14.96
+4,23.88,20.66,22.83
+```
+
+The mapping CSV file includes:
+- rank: MPI rank number
+- cpu_id: Physical CPU core ID
+- cpu_numa: NUMA node of the CPU
+- memory_numa: NUMA node where memory is allocated
+
+Example mapping.csv:
+```csv
+rank,cpu_id,cpu_numa,memory_numa
+0,15,0,0
+1,22,1,1
+2,43,2,2
+...
+```
 
 ### Using the Wrapper Script
 
