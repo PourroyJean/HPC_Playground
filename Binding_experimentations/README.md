@@ -1,18 +1,124 @@
-## NUMA Memory Latency Benchmark
+# NUMA Benchmarking Suite
 
-This project provides an MPI-based benchmark tool designed to measure memory latency across different NUMA (Non-Uniform Memory Access) domains using a pointer-chasing approach. The primary goal is to demonstrate how memory access latency varies depending on the NUMA node proximity between CPU cores and the allocated memory region.
+This suite provides tools to run NUMA-aware benchmarks under various core binding and memory allocation strategies on systems with Non-Uniform Memory Access (NUMA) architectures. It leverages SLURM for job execution and `numactl` for fine-grained control over process placement and memory policy.
 
-## Key Features
+The main script, `run_numa_benchmarks.sh`, orchestrates benchmark runs across specified NUMA domains, supporting both sequential and interleaved core binding patterns, while scaling the number of ranks per domain. It relies on `wrapper_numa.sh` to apply per-rank NUMA memory bindings before executing the actual benchmark binary.
 
-- Pointer-chasing method: Accurately measures memory latency by creating a randomized linked list, thus preventing CPU caching and prefetching effects.
+This project provides an MPI-based benchmark tool `numa_bench` designed to measure memory latency across different NUMA (Non-Uniform Memory Access) domains using a pointer-chasing approach. The primary goal is to demonstrate how memory access latency varies depending on the NUMA node proximity between CPU cores and the allocated memory region.
 
-- MPI Parallelism: Supports parallel and serial measurement modes across multiple MPI ranks.
+## Features
 
-- Flexible Allocation: Allocates memory using standard methods, allowing external control of NUMA bindings (e.g., via numactl).
+* Supports **sequential** and **interleaved** core allocation strategies across specified NUMA domains.
+* Configurable **NUMA domain selection** for benchmarks.
+* Automatic **core binding** based on system topology defined in an architecture file.
+* Handles core exclusion via `SKIP_CORES` directive.
+* Scales tests by increasing the number of ranks per domain.
+* **Dry-run mode** (`--dry-run`) to preview `srun` commands without execution.
+* Customizable **job directory labels** (`--label`) for better organization.
 
-- Detailed Reporting: Provides clear, tabular output of latency measurements per MPI rank, alongside detailed system diagnostics.
 
-- Multi-Size Testing: Supports testing multiple allocation sizes in a single run with automatic size progression.
+
+# run_numa_benchmarks.sh
+
+This script is the main entry point for running the benchmark suite. It orchestrates the execution across different configurations, calling `wrapper_numa.sh` via `srun` for each specific test case.
+
+### Command-Line Options
+
+- `--arch <config_file>`: **(Required)** Path to the architecture configuration file defining the system topology and parameters.
+
+- `--sequential <domains>`: Run benchmark with sequential CPU allocation on the specified NUMA domains (comma-separated list, e.g., 0,1). Ranks are bound to cores sequentially within each specified domain's available core list.
+
+- `--interleaved <domains>`: Run benchmark with interleaved CPU allocation across CCDs within the specified NUMA domains (comma-separated list, e.g., 0,1). Ranks are bound to cores by picking one core from each CCD in a round-robin fashion within each domain.
+
+- `--dry-run`: Show the srun commands that would be generated and executed for each configuration without actually running them. Useful for verifying core/NUMA bindings.
+
+
+### Examples
+
+```bash
+# Run sequential allocation on NUMA domains 0 and 1
+sbatch ./run_numa_benchmarks.sh --arch architectures/lumi_partc --sequential 0,1
+
+# Run interleaved allocation across three domains with custom label
+sbatch ./run_numa_benchmarks.sh --arch architectures/lumi_partc --interleaved 0,1,2 --label test_run
+
+# Preview commands without executing (dry-run)
+./run_numa_benchmarks.sh --arch architectures/lumi_partc --sequential 0,1 --dry-run
+```
+
+### Output Structure
+
+Results are stored in the `results_scaling/job_<SLURM_JOB_ID>` directory (with optional label suffix):
+```
+results_scaling/job_123456_my_test/
+├── sequential_domain0_8ranks_16MB.csv
+├── sequential_domains0,1_16ranks_16MB.csv
+└── slurm_run_numa_benchmarks_123456.log
+```
+
+Each CSV file contains latency measurements for the specific configuration (allocation type, domains, ranks, memory size).
+
+
+-----------------------------------------------------------------------------------------------------------------
+# Wrapper Script (wrapper_numa.sh)
+
+The `wrapper_numa.sh` script provides flexible NUMA binding control for individual MPI ranks. It is called by `run_numa_benchmarks.sh` for each rank to manage memory allocation policies and execute the actual benchmark binary.
+
+### Command-Line Options
+
+- `--numa=VALUE`: Control NUMA domain binding
+  - Single value (e.g., `--numa=3`): Bind all ranks to that NUMA node
+  - Comma-separated list (e.g., `--numa=0,1,2,3`): Bind each rank according to the list
+  - `auto`: Automatically distribute ranks across all NUMA nodes (round-robin)
+  - Default: No NUMA binding (bind to node 0)
+
+- `--quiet`: Disable verbose output (default is verbose)
+- `--dry-run`: Print commands that would be executed without running them
+- `--help`: Display help message and exit
+- `--`: Separator after which all arguments are passed directly to the benchmark
+
+### Examples
+
+```bash
+# Bind all MPI ranks to NUMA node 3 with explicit CPU mapping
+srun --nodes=1 --ntasks=4 --cpu-bind=map_cpu:1,17,33,49 ./wrapper_numa.sh --numa=3 -- --size=2048
+
+# Specify binding per rank with CPU mapping across CCDs
+srun --nodes=1 --ntasks=8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57 ./wrapper_numa.sh --numa=0,1,2,3,0,1,2,3 -- --size=1024
+
+# Automatic round-robin binding with CPU mapping to first core of each CCD
+srun --nodes=1 --ntasks=4 --cpu-bind=map_cpu:0,16,32,48 ./wrapper_numa.sh --numa=auto -- --size=2048
+
+# Dry run to see what commands would be executed
+srun --nodes=1 --ntasks=4 --cpu-bind=map_cpu:1,17,33,49 ./wrapper_numa.sh --numa=0,1,2,3 --dry-run -- --size=512
+```
+
+### Features
+
+- Flexible NUMA binding per rank
+- Automatic round-robin NUMA distribution
+- Verbose output for debugging
+- Dry-run mode for testing configurations
+- Validation of NUMA domain specifications
+- Automatic detection of available NUMA nodes
+
+Note: This script is designed to run under SLURM with `srun` and requires the `numactl` package to be installed.
+
+-----------------------------------------------------------------------------------------------------------------
+# Memory Latency Benchmark
+
+The tool includes a memory latency benchmark that measures the actual memory access time for each MPI rank. This benchmark:
+
+1. Creates a randomly shuffled linked list in the allocated memory
+2. Uses pointer chasing to force memory accesses in a non-predictable pattern
+3. Measures the time taken to traverse the linked list
+4. Reports average latency per memory access in nanoseconds
+
+The benchmark helps identify:
+- Local vs. remote NUMA memory access latencies
+- Impact of NUMA node binding on memory performance
+- Memory access patterns and their effect on performance
+- Cache effects across different allocation sizes
 
 ## How It Works
 
@@ -30,111 +136,9 @@ Detailed analysis of benchmark results is available in the [experimentation.md](
 - Visualizations of memory access latency
 - Insights into AMD EPYC architecture performance characteristics
 
-## Requirements
 
-- Linux operating system with NUMA support
-- MPI implementation (e.g., OpenMPI, MPICH)
-- NUMA development libraries (`libnuma-dev`)
-- hwloc library (`libhwloc-dev`)
 
-## Building
 
-```bash
-make clean
-make
-```
-
-## Usage
-
-Basic usage:
-```bash
-srun --nodes 1 --ntasks 8 --cpu-bind=map_cpu:1,9,17,25,33,41,49,57  numactl --membind=0 --hint=nomultithread ./numa_bench --size=1024
-```
-
-### Command Line Options
-
-- `--size=SIZE`: Specify memory size to allocate in MB (default: 512)
-- `--size=MIN-MAX`: Test multiple memory sizes from MIN to MAX MB
-- `--serial`: Run in serial mode (one rank at a time)
-- `--csv=FILENAME`: Output results in CSV format to the specified file
-- `--mapping=FILENAME`: Generate a CSV file with rank mapping information
-
-The CSV output format includes:
-- First column: Memory size in MB
-- Subsequent columns: Latency measurements for each MPI rank
-- Values are formatted with 2 decimal places
-
-Example CSV output:
-```csv
-size (MB),0,1,2
-1,13.13,12.01,12.55
-2,15.91,15.76,14.96
-4,23.88,20.66,22.83
-```
-
-The mapping CSV file includes:
-- rank: MPI rank number
-- cpu_id: Physical CPU core ID
-- cpu_numa: NUMA node of the CPU
-- memory_numa: NUMA node where memory is allocated
-
-Example mapping.csv:
-```csv
-rank,cpu_id,cpu_numa,memory_numa
-0,15,0,0
-1,22,1,1
-2,43,2,2
-...
-```
-
-### Using the Wrapper Script
-
-The project includes a wrapper script `run_numa.sh` that provides additional flexibility in controlling NUMA bindings and memory allocation:
-
-```bash
-# Basic usage with wrapper script
-srun --nodes=1 --ntasks=56 ./run_numa.sh --numa=3 -- --size=2048
-
-# Specify binding per rank
-srun --nodes=1 --ntasks=6 ./run_numa.sh --numa=0,1,2,3,0,1 -- --size=1024
-
-# Automatic round-robin binding with verbose output
-srun --nodes=1 --ntasks=56 ./run_numa.sh --numa=auto --verbose -- --size=2048
-
-# Test multiple memory sizes from 1MB to 16GB
-srun --nodes=1 --ntasks=8 ./run_numa.sh --numa=0,0,1,1,2,2,3,3 --verbose -- --size=1-16384
-```
-
-#### Wrapper Script Options
-
-- `--numa=VALUE`: Control NUMA domain binding
-  - Single value (e.g., `--numa=3`): Bind all ranks to that NUMA node
-  - Comma-separated list (e.g., `--numa=0,1,2,3`): Bind each rank according to the list
-  - `auto`: Automatically distribute ranks across all NUMA nodes (round-robin)
-  - Default: No NUMA binding
-
-- `--verbose`: Enable verbose output showing rank, NUMA node, and commands
-
-- `--serial`: Run in serial mode (one rank at a time)
-
-- `--`: Separator after which all arguments are passed directly to numa_bench
-
-Note: All numa_bench options (including `--size`) should be passed after the `--` separator.
-
-## Memory Latency Benchmark
-
-The tool includes a memory latency benchmark that measures the actual memory access time for each MPI rank. This benchmark:
-
-1. Creates a randomly shuffled linked list in the allocated memory
-2. Uses pointer chasing to force memory accesses in a non-predictable pattern
-3. Measures the time taken to traverse the linked list
-4. Reports average latency per memory access in nanoseconds
-
-The benchmark helps identify:
-- Local vs. remote NUMA memory access latencies
-- Impact of NUMA node binding on memory performance
-- Memory access patterns and their effect on performance
-- Cache effects across different allocation sizes
 
 ### Benchmark Configuration
 
@@ -143,31 +147,8 @@ The benchmark helps identify:
 - Random access pattern using Fisher-Yates shuffle algorithm
 - Separate random seed for each MPI rank
 
-## System Configuration
 
-The example was run on a system with the following specifications:
-- CPU: AMD EPYC 7A53 64-Core Processor
-- CPU Family: 25
-- Thread(s) per core: 2
-- Core(s) per socket: 64
-- Socket(s): 1
-- NUMA node(s): 4
-
-NUMA Node CPU Distribution:
-- NUMA node0 CPU(s): 0-15,64-79
-- NUMA node1 CPU(s): 16-31,80-95
-- NUMA node2 CPU(s): 32-47,96-111
-- NUMA node3 CPU(s): 48-63,112-127
-
-## Example Output
-
-The tool provides detailed information about:
-1. MPI process distribution
-2. CPU affinity for each process
-3. NUMA node assignments
-4. Memory allocation details
-5. Memory latency measurements across multiple allocation sizes
-6. NUMA statistics for the last process
+### Exemple
 
 Example output on an AMD EPYC 7A53 64-Core Processor with memory size range testing:
 ```
@@ -239,37 +220,21 @@ Total                        8.90            2.36            0.95        16390.4
 
 The example shows several important characteristics:
 
-1. **Memory Size Scaling**:
-   - The benchmark tests memory sizes from 1MB to 16384MB (16GB)
-   - Clear latency patterns emerge at different memory size thresholds
-   - Cache effects are visible at sizes under 32MB (~10-19ns latency)
-   - DRAM access dominates at larger sizes (>64MB, ~65-180ns latency)
-
-2. **NUMA Node Distribution**:
-   - Each NUMA node has two ranks bound to it (0/1 to node 0, 2/3 to node 1, etc.)
-   - All memory for a given rank is properly bound to its assigned NUMA node
-
-3. **Latency Pattern Analysis**:
-   - Interesting pattern between even and odd-numbered ranks within NUMA domains
-   - Even-numbered ranks (0,2,4,6) show higher latencies for large allocations
-   - Odd-numbered ranks (1,3,5,7) maintain more consistent latencies
-   - Full analysis of these patterns available in [experimentation.md](experimentation.md)
-
-4. **Memory Allocation**:
+1. **Memory Allocation**:
    - Total memory allocated scales up to 16GB per rank
    - Memory is successfully bound to designated NUMA nodes
    - Small amounts of memory are allocated on other nodes for system overhead
 
-## Notes
+2. **Memory Size Scaling**:
+   - The benchmark tests memory sizes from 1MB to 16384MB (16GB)
+   - Clear latency patterns emerge at different memory size thresholds
+   - Full analysis of these patterns available in [experimentation.md](experimentation.md)
 
-- Memory allocation is controlled externally using `numactl --membind`
-- Memory is touched after allocation to ensure it's actually allocated
-- The last MPI process shows detailed NUMA statistics using `numastat`
-- CPU affinity information is obtained using hwloc
-- The memory latency benchmark uses pointer chasing to measure actual memory access times
-- Latency measurements help identify NUMA-related performance impacts
-- Analysis of results with cache hierarchy correlation available in experimentation.md
 
+
+
+
+---
 ## Future Enhancements
 
 The following features are planned for future development:
@@ -278,21 +243,3 @@ The following features are planned for future development:
   - [ ] Add bandwidth measurement alongside latency
   - [ ] Implement different access patterns (sequential, random, strided)
   - [ ] Support for both read and write bandwidth tests
-
-- [x] Multi-Size Memory Testing
-  - [x] Support for testing multiple allocation sizes in a single run
-  - [x] Automatic size progression (e.g., 1MB to 16GB)
-  - [x] Comparison of latency across different sizes
-  - [x] Detection of memory size thresholds affecting performance
-
-- [ ] Enhanced Visualization and Reporting
-  - [ ] Export results in CSV/JSON format for external analysis
-  - [x] Support for comparing multiple test runs
-  - [x] Analysis of results with cache hierarchy correlation
-
-- [x] Per-Task NUMA Domain Assignment
-  - [x] Allow specifying different NUMA domains for each MPI task
-  - [x] Support for NUMA domain mapping via command line arguments
-  - [x] Enable testing of cross-NUMA node memory access patterns
-  - [x] Provide flexibility in memory placement strategies
-
